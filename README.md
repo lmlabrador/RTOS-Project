@@ -1,73 +1,181 @@
-# React + TypeScript + Vite
+# RTOS_Project
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Mixed-Criticality Scheduling Simulator built with React, TypeScript, Zustand, and Vite.
 
-Currently, two official plugins are available:
+This project demonstrates Vestal-style mixed-criticality behavior with:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Task models containing `WCET_LO` and `WCET_HI`
+- LO to HI mode-switch protocol
+- Priority-based scheduling with deadline and release tie-breaks
+- Timeline and event log visualization
+- Report modal with waveform views, formal timing checks (RTA), and optimization suggestions
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React 19
+- TypeScript 5
+- Zustand
+- Framer Motion
+- Vite 5
+- Tailwind CSS
 
-## Expanding the ESLint configuration
+## Prerequisites
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Node.js 18+ (recommended 20+)
+- npm 9+
+- Git
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Check versions:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```powershell
+node -v
+npm -v
+git --version
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Step-By-Step Setup (Windows PowerShell)
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+1. Clone the repository
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```powershell
+git clone https://github.com/lmlabrador/RTOS-Project.git
 ```
+
+2. Go to the project folder
+
+```powershell
+cd RTOS-Project
+```
+
+3. Install dependencies
+
+```powershell
+npm install
+```
+
+4. Run the development server
+
+```powershell
+npm run dev
+```
+
+5. Open the app in browser
+
+- Vite prints a URL (usually `http://localhost:5173`)
+
+## Step-By-Step Setup (macOS/Linux)
+
+```bash
+git clone https://github.com/lmlabrador/RTOS-Project.git
+cd RTOS-Project
+npm install
+npm run dev
+```
+
+## Build And Preview
+
+1. Create production build
+
+```powershell
+npm run build
+```
+
+2. Preview production build locally
+
+```powershell
+npm run preview
+```
+
+## Lint
+
+```powershell
+npm run lint
+```
+
+## How To Use The Simulator
+
+1. Create or edit tasks in `Create Task` and `Task Set`.
+2. Start simulation with `Start`.
+3. Use `Pause/Continue` and `Stop/Reset` controls as needed.
+4. Set optional simulation end time in controls.
+
+- Leave empty for auto end time using task hyperperiod (LCM of periods).
+
+5. Observe:
+
+- `Scheduler Timeline` for execution segments and mode switches
+- `System Status` for current mode, misses, lifecycle state
+- `Event Log` for releases/completions/misses/suspensions
+
+6. Open `View Report` for:
+
+- KPI summary
+- Waveforms
+- Formal timing checks (RTA)
+- Optimization recommendations
+
+## Project Structure
+
+```text
+src/
+  components/
+    EventLog.tsx
+    ReportModal.tsx
+    SchedulerTimeline.tsx
+    SimulationControls.tsx
+    SystemStatusPanel.tsx
+    TaskForm.tsx
+    TaskTable.tsx
+  engine/
+    SchedulerEngine.ts
+    SimulationClock.ts
+    TaskModel.ts
+  pages/
+    Dashboard.tsx
+  store/
+    schedulerStore.ts
+  styles/
+    globals.css
+```
+
+## Common Issues
+
+1. `npm` command not found
+
+- Install Node.js from `https://nodejs.org/` and reopen terminal.
+
+2. Port already in use
+
+- Start on another port:
+
+```powershell
+npm run dev -- --port 5174
+```
+
+3. TypeScript or lint errors after pull
+
+```powershell
+npm install
+npm run build
+npm run lint
+```
+
+4. Git line-ending warnings (`LF will be replaced by CRLF`)
+
+- This is common on Windows and usually harmless.
+
+## Scripts
+
+```json
+{
+  "dev": "vite",
+  "build": "tsc -b && vite build",
+  "lint": "eslint .",
+  "preview": "vite preview"
+}
+```
+
+## Notes
+
+- The simulator is intended for educational and project demonstration use.
+- Formal checks in report are lightweight fixed-priority analyses and not a certified safety proof.
