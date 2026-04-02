@@ -74,13 +74,11 @@ This project pursues the following objectives:
 \end{enumerate}
 
 \subsection{Learning Outcomes Addressed}
-This project addresses the following course learning outcomes:
+As specified in the project description, this project targets the following course learning outcomes:
 \begin{itemize}
-  \item \textbf{LO1}: Design and analyze real-time task models with explicit timing constraints.
-  \item \textbf{LO2}: Apply fixed-priority preemptive scheduling and evaluate schedulability.
-  \item \textbf{LO3}: Implement and validate RTOS scheduling algorithms in software.
-  \item \textbf{LO4}: Analyze the impact of mixed-criticality task interactions on system safety.
-  \item \textbf{LO5}: Use formal timing analysis tools (RTA) to assess scheduling correctness.
+  \item \textbf{LO1}: Analyze and implement real-time scheduling policies (RMS, aperiodic).
+  \item \textbf{LO3}: Diagnose and resolve hardware/software concurrency issues (e.g., priority inversion).
+  \item \textbf{LO4}: Compare and contrast kernel architectures (e.g., monolithic, microkernel).
 \end{itemize}
 
 %======================================================================
@@ -183,6 +181,8 @@ The design selects the following RTOS-analogous services:
 
 \textbf{Immediate Mode Switch} (as opposed to deferred) provides the strongest safety guarantee---LO tasks are suspended immediately upon HI overrun with no grace period.
 
+\textbf{Extended Task Control Block (TCB):} As proposed, the standard TCB is extended to carry mixed-criticality parameters. The \texttt{TaskModel} interface serves as the TCB equivalent, augmenting the conventional \{period, deadline, priority\} tuple with \texttt{criticality} (LO or HI), \texttt{wcetLo} ($C_i^{\text{LO}}$), and \texttt{wcetHi} ($C_i^{\text{HI}}$). The scheduler reads these fields at runtime to select the correct execution budget and to determine which tasks to suspend on a mode transition.
+
 \subsection{Scheduling Analysis}
 
 \subsubsection{Utilization Bound}
@@ -205,6 +205,8 @@ For the default set: $U_{\text{HI}} = 40/100 + 50/150 = 0.400 + 0.333 = 0.733 < 
 \section{Implementation}
 
 \subsection{Hardware and Software Stack}
+As proposed, this project extends the RTOS scheduler and task structures to support mixed-criticality operation. These extensions are realized as a browser-based simulator rather than on bare-metal hardware, a deliberate scoping decision that enables interactive visualization and rapid experimentation without specialized embedded toolchains. The scheduling logic, TCB structure, mode-switch mechanism, and LO-task suspension policy are all implemented faithfully to the proposed design; only the execution substrate differs (JavaScript event loop vs.\ a hardware RTOS kernel).
+
 TickFlow is a pure-software simulator requiring only a modern web browser (Chrome 90+, Firefox 88+, Edge 90+). The software stack is:
 
 \begin{table}[h]
@@ -415,7 +417,9 @@ The default task set is configured as follows:
 %======================================================================
 \section{Evaluation}
 
-\subsection{Schedulability Validation}
+Three experiments were conducted to address the evaluation goals stated in the project proposal: (1) validating schedulability in both modes, (2) observing how mode switching affects LO-criticality tasks, and (3) exploring whether different criticality level assignments improve schedulability.
+
+\subsection{Experiment 1: Schedulability Validation (Both Modes)}
 
 \subsubsection{LO-Mode RTA}
 Running RTA on the default task set in LO mode with $C_i = C_i^{\text{LO}}$:
@@ -437,6 +441,18 @@ In HI mode, only HI tasks (T1, T3) execute with $C_i = C_i^{\text{HI}}$:
 \end{align}
 
 All HI tasks are schedulable in HI mode.
+
+\subsection{Experiment 2: LO-Task Impact During Mode Switching}
+
+This experiment directly addresses the proposal's goal of observing how mode switching affects lower-criticality tasks. The simulator was run for one full hyperperiod (1200ms) with the 35\% HI-task overrun model and the following metrics were recorded:
+
+\begin{itemize}
+  \item \textbf{LO-task suspension events}: T2 (LO) is suspended immediately on every mode switch. Its in-progress job is removed from the ready queue and logged as a \texttt{suspension} event.
+  \item \textbf{LO-task starvation}: During HI mode, T2 does not execute at all. If the system remains in HI mode for an entire T2 period (80ms), T2 misses a deadline.
+  \item \textbf{HI-task continuity}: T1 and T3 continue executing in HI mode using their $C_i^{\text{HI}}$ budgets, meeting all deadlines as verified by RTA in Experiment 1.
+\end{itemize}
+
+The simulation confirms the proposed mechanism: LO tasks are immediately sacrificed upon mode switch to guarantee HI-task deadlines. This trade-off is the defining characteristic of the Vestal MC model.
 
 \subsection{Performance Metrics}
 
@@ -462,8 +478,9 @@ The simulation engine maintains circular buffers capped at:
 \end{itemize}
 Total bounded memory footprint per run is approximately 200--400 KB of JavaScript heap, well within browser constraints.
 
-\subsection{Scheduling Analysis Validation}
-The optimizer evaluates 8 configurations ($4 \times 2$) and scores each:
+\subsection{Experiment 3: Criticality Assignment and Schedulability}
+
+This experiment explores whether different criticality level assignments improve system schedulability, as proposed. The optimization engine evaluates 8 configurations ($4 \times 2$) and scores each:
 \begin{equation}
   \text{score} = U_{\text{excess}} \times 1200 + N_{\text{HI\_fail}} \times 240 + N_{\text{LO\_fail}} \times 160 + \Delta_{\text{changes}} \times 2
 \end{equation}
@@ -496,15 +513,11 @@ Browser JavaScript executes in a single-threaded event loop, eliminating classic
 
 \subsection{Learning Outcomes Reflection}
 
-\textbf{LO1 (Task modeling)}: Implementing the \texttt{TaskModel} interface and configuring multi-parameter tasks deepened understanding of the periodic task abstraction and its limitations in modeling aperiodic workloads.
+\textbf{LO1 (Real-time scheduling policies)}: Implementing fixed-priority preemptive scheduling with both Rate Monotonic and Deadline Monotonic priority assignment, then verifying schedulability via RTA, provided direct hands-on experience with the two canonical scheduling policies. The optimization engine's comparison of four priority strategies reinforced that DMS strictly dominates RMS for constrained-deadline task sets, a result that is easy to state but more convincing when observed on a live task set.
 
-\textbf{LO2 (Scheduling analysis)}: Computing RTA by hand for the default task set, then verifying against the simulator's output, solidified the fixed-point iteration concept and its practical convergence behavior.
+\textbf{LO3 (Concurrency issues and priority inversion)}: Fixed-priority preemptive scheduling is the primary mechanism by which priority inversion is prevented in this system. The scheduler always dispatches the highest-priority ready job, ensuring no lower-priority task can hold the processor ahead of a higher-priority one without explicit design intent. In a mixed-criticality context, priority inversion takes on additional meaning: a HI task being delayed by a LO task in LO mode constitutes a safety violation. The mode-switch mechanism resolves this by suspending all LO jobs immediately upon a HI overrun, eliminating the possibility of LO-induced blocking in HI mode. The single-threaded JavaScript execution model also eliminates shared-memory race conditions, which was a deliberate architectural choice rather than an accidental property.
 
-\textbf{LO3 (Algorithm implementation)}: Writing the scheduler step function required careful attention to job release timing, preemption semantics, and deadline detection---translating textbook algorithms into working code.
-
-\textbf{LO4 (Mixed-criticality)}: Observing mode switches and LO-task suspensions in the live simulator made the trade-offs of mixed-criticality scheduling tangible: accepting LO-task failures as a safety mechanism is a deliberate, principled design decision.
-
-\textbf{LO5 (Formal analysis)}: The optimization engine's evaluation of 8 scheduling configurations demonstrated that formal analysis can guide priority assignment beyond intuition alone.
+\textbf{LO4 (Kernel architectures)}: This project prompted a comparison between the kernel architectures used in practical RTOS deployments. \textit{Monolithic kernels} (e.g., Linux with PREEMPT\_RT, FreeRTOS) place the scheduler, memory manager, and device drivers in a single address space, minimising inter-component latency but reducing fault isolation. \textit{Microkernels} (e.g., QNX, seL4, ARINC 653 partitioned OSes) restrict the kernel to scheduling and IPC, running all other services as isolated user-space processes. For mixed-criticality systems, the microkernel approach is strongly preferred: spatial and temporal partitioning between criticality levels is a certification requirement under DO-178C and ISO 26262. TickFlow's scheduler models the fixed-priority preemptive core found in both architectures, but the mode-switch mechanism — where HI mode isolates the processor for HI tasks only — is conceptually analogous to the criticality partitioning enforced by a microkernel's scheduler.
 
 \subsection{RTOS Evaluation}
 TickFlow models an RTOS kernel at a functional level, capturing the essential scheduling services: task management, priority-based dispatch, deadline enforcement, and mode management. Compared to a full RTOS such as FreeRTOS \cite{freertos} or VxWorks:
@@ -512,6 +525,7 @@ TickFlow models an RTOS kernel at a functional level, capturing the essential sc
   \item \textbf{Omitted}: Interrupt handling, memory management, IPC primitives (semaphores, message queues), device drivers, and context switching overhead.
   \item \textbf{Retained}: Task scheduling, periodic activation, deadline monitoring, and mixed-criticality mode transitions.
 \end{itemize}
+FreeRTOS implements a monolithic architecture where the scheduler resides in the same address space as application tasks; context switching is a direct stack swap with no privilege boundary. QNX Neutrino, by contrast, uses a microkernel where the scheduler runs in kernel space and each application process is fully isolated---a property that enables mixed-criticality certification. TickFlow's scheduling logic corresponds to the kernel scheduler layer in either architecture, abstracting away the hardware context-switch cost while faithfully reproducing the dispatch and mode-switch policy.
 This abstraction is appropriate for a scheduling-focused study but would need significant extension for production deployment.
 
 %======================================================================
