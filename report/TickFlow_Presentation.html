@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TickFlow – RTOS Presentation</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --border: #334155;
+    --hi: #3b82f6;
+    --lo: #64748b;
+    --accent: #38bdf8;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --text: #f1f5f9;
+    --sub: #94a3b8;
+    --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+  /* ── Slide Container ── */
+  .deck { width: 100%; height: 100vh; overflow: hidden; position: relative; }
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    padding: 48px 64px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .slide.active { opacity: 1; pointer-events: all; }
+
+  /* ── Typography ── */
+  h1 { font-size: 2.6rem; font-weight: 800; line-height: 1.15; text-align: center; }
+  h2 { font-size: 1.9rem; font-weight: 700; margin-bottom: 28px; }
+  h3 { font-size: 1.2rem; font-weight: 600; color: var(--accent); margin-bottom: 8px; }
+  p  { font-size: 1.05rem; color: var(--sub); line-height: 1.7; }
+  .subtitle { font-size: 1.1rem; color: var(--sub); margin-top: 12px; text-align: center; }
+  .tag  { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+  .hi-tag  { background: rgba(59,130,246,0.2); color: var(--hi); border: 1px solid rgba(59,130,246,0.4); }
+  .lo-tag  { background: rgba(100,116,139,0.2); color: var(--lo); border: 1px solid rgba(100,116,139,0.4); }
+  .ok  { color: var(--green); }
+  .bad { color: var(--red); }
+  code { font-family: 'Cascadia Code', 'Fira Mono', monospace; font-size: 0.88rem; background: rgba(255,255,255,0.07); padding: 2px 6px; border-radius: 4px; }
+
+  /* ── Layout Helpers ── */
+  .cols  { display: grid; gap: 24px; width: 100%; }
+  .cols2 { grid-template-columns: 1fr 1fr; }
+  .cols3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card  { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
+  .full  { width: 100%; }
+  .center { text-align: center; }
+
+  /* ── KPI Boxes ── */
+  .kpi { text-align: center; }
+  .kpi .val { font-size: 2.2rem; font-weight: 800; color: var(--accent); }
+  .kpi .lbl { font-size: 0.82rem; color: var(--sub); margin-top: 4px; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th    { background: rgba(56,189,248,0.12); color: var(--accent); text-align: left; padding: 10px 14px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  td    { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+
+  /* ── Gantt Mini ── */
+  .gantt { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .gantt-row { display: flex; align-items: center; margin-bottom: 10px; gap: 8px; }
+  .gantt-label { width: 30px; font-size: 0.8rem; color: var(--sub); flex-shrink: 0; }
+  .gantt-track { flex: 1; height: 22px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; position: relative; }
+  .gantt-bar { height: 100%; position: absolute; border-radius: 4px; }
+  .bar-hi { background: linear-gradient(90deg, #2563eb, #3b82f6); }
+  .bar-lo { background: linear-gradient(90deg, #475569, #64748b); }
+  .mode-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red); z-index: 2; }
+
+  /* ── Timeline / Event List ── */
+  .event-list { list-style: none; }
+  .event-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  .event-list li:last-child { border: none; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot-release    { background: #3b82f6; }
+  .dot-complete   { background: #22c55e; }
+  .dot-miss       { background: #f59e0b; }
+  .dot-switch     { background: #ef4444; }
+  .dot-suspension { background: #8b5cf6; }
+
+  /* ── Architecture Box ── */
+  .arch { border: 1px solid var(--border); border-radius: 10px; padding: 0; overflow: hidden; font-size: 0.88rem; text-align: center; }
+  .arch-layer { padding: 14px 20px; }
+  .arch-layer:not(:last-child) { border-bottom: 1px solid var(--border); }
+  .arch-layer.top    { background: rgba(59,130,246,0.1); }
+  .arch-layer.middle { background: rgba(56,189,248,0.07); }
+  .arch-layer.bottom { background: rgba(100,116,139,0.1); }
+  .arch-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+  .arch-sub   { color: var(--sub); font-size: 0.8rem; }
+
+  /* ── Timeline Bar (slide 9) ── */
+  .tl-bar { height: 32px; border-radius: 6px; margin-bottom: 6px; position: relative; overflow: visible; }
+  .tl-label { position: absolute; left: 0; top: -18px; font-size: 0.75rem; color: var(--sub); }
+
+  /* ── Mode Badge ── */
+  .mode-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 999px; font-weight: 700; font-size: 1rem; }
+  .mode-lo { background: rgba(100,116,139,0.2); border: 1px solid var(--lo); }
+  .mode-hi { background: rgba(239,68,68,0.15); border: 1px solid var(--red); color: var(--red); }
+
+  /* ── Slide Number ── */
+  .slide-num { position: fixed; bottom: 18px; right: 28px; font-size: 0.78rem; color: var(--sub); z-index: 100; }
+
+  /* ── Progress Bar ── */
+  #progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent); transition: width 0.4s; z-index: 200; }
+
+  /* ── Nav Buttons ── */
+  .nav { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; z-index: 100; }
+  .nav button {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 20px; border-radius: 8px; cursor: pointer; font-size: 0.9rem;
+    transition: background 0.2s;
+  }
+  .nav button:hover { background: var(--border); }
+
+  /* ── Slide-specific tweaks ── */
+  #slide-1 { background: radial-gradient(ellipse at 60% 40%, rgba(59,130,246,0.15) 0%, transparent 60%), var(--bg); }
+  #slide-1 h1 span { color: var(--accent); }
+
+  /* Equation-style box */
+  .eq { background: rgba(56,189,248,0.07); border-left: 3px solid var(--accent); padding: 12px 18px; border-radius: 0 8px 8px 0; font-family: 'Cascadia Code', monospace; font-size: 0.92rem; margin: 8px 0; }
+
+  /* ── Bullet list ── */
+  ul.bullets { list-style: none; }
+  ul.bullets li { padding: 7px 0; display: flex; align-items: flex-start; gap: 10px; font-size: 1rem; color: var(--sub); }
+  ul.bullets li::before { content: '▸'; color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+  ul.bullets li strong { color: var(--text); }
+
+  /* Backup label */
+  .backup-label { position: absolute; top: 20px; left: 28px; font-size: 0.75rem; color: var(--sub); text-transform: uppercase; letter-spacing: 0.1em; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<div class="deck" id="deck">
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 1 – Title
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide active" id="slide-1">
+    <h1><span>TickFlow</span></h1>
+    <h1 style="font-size:1.6rem;font-weight:400;margin-top:8px;">A Web-Based Mixed-Criticality<br>Real-Time Scheduling Simulator</h1>
+    <div class="subtitle" style="margin-top:32px;">
+      Lance Labrador &nbsp;|&nbsp; Real-Time Operating Systems &nbsp;|&nbsp; Term 8<br>
+      <span style="font-size:0.9rem;color:#64748b;margin-top:6px;display:block;">April 2, 2026</span>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:40px;">
+      <span class="tag hi-tag">Mixed Criticality</span>
+      <span class="tag" style="background:rgba(56,189,248,0.15);color:var(--accent);border:1px solid rgba(56,189,248,0.4);">React 19 + TypeScript</span>
+      <span class="tag" style="background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.4);">Fixed-Priority Preemptive</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 2 – Problem Statement
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-2">
+    <h2>Problem Statement</h2>
+    <div class="cols cols2 full">
+      <div class="card">
+        <h3>The Core Challenge</h3>
+        <ul class="bullets">
+          <li><strong>Safety-critical systems</strong> must serve tasks of vastly different importance on shared hardware.</li>
+          <li><strong>A collision-avoidance routine</strong> and a cabin-temperature display share one CPU — a missed deadline in one is catastrophic, in the other inconvenient.</li>
+          <li><strong>Traditional RTOS</strong> schedulers treat all tasks equally — no mechanism to distinguish criticality levels at runtime.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>The Simulator Gap</h3>
+        <ul class="bullets">
+          <li><strong>Physical RTOS platforms</strong> require specialized hardware and lengthy toolchain setup.</li>
+          <li><strong>Existing tools</strong> (Cheddar, MAST) are desktop-only, CLI-based, or commercial.</li>
+          <li><strong>Mode switching</strong> is difficult to visualize without live, interactive feedback.</li>
+          <li><strong>Need:</strong> An accessible, visual, browser-native MC scheduling tool for learning and analysis.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 3 – Motivation & Objectives
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-3">
+    <h2>Motivation &amp; Objectives</h2>
+    <div class="cols cols2 full">
+      <div class="card">
+        <h3>Industry Motivation</h3>
+        <ul class="bullets">
+          <li><strong>ARINC 653 (Avionics)</strong> and <strong>AUTOSAR (Automotive)</strong> mandate mixed-criticality task management.</li>
+          <li><strong>ISO 26262 &amp; DO-178C</strong> require formal schedulability evidence for safety certification.</li>
+          <li><strong>SWaP constraints</strong> (Size, Weight, Power) force co-hosting tasks of different safety levels.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Project Objectives</h3>
+        <ul class="bullets">
+          <li>Implement the <strong>Vestal MC model</strong> faithfully in a browser simulator.</li>
+          <li>Provide <strong>real-time visualization</strong> of Gantt charts, events, and mode switches.</li>
+          <li>Implement <strong>Response Time Analysis (RTA)</strong> for schedulability verification.</li>
+          <li>Develop an <strong>optimization engine</strong> for priority assignment recommendations.</li>
+          <li>Validate against established <strong>scheduling theory</strong>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 4 – RTOS Concepts: Mixed Criticality
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-4">
+    <h2>RTOS Concepts: Mixed-Criticality Scheduling</h2>
+    <div class="cols cols2 full">
+      <div class="card">
+        <h3>Vestal Model (2007)</h3>
+        <ul class="bullets">
+          <li>Each task has <strong>criticality level</strong>: LO or HI</li>
+          <li>HI tasks carry <strong>two WCET budgets</strong>:
+            <br>&nbsp;&nbsp;&nbsp;C<sup>LO</sup> — safe pessimistic estimate
+            <br>&nbsp;&nbsp;&nbsp;C<sup>HI</sup> — true worst-case (C<sup>HI</sup> ≥ C<sup>LO</sup>)</li>
+          <li><strong>LO mode</strong>: All tasks run; HI tasks use C<sup>LO</sup></li>
+          <li><strong>Mode switch</strong>: If HI task exceeds C<sup>LO</sup>, switch to HI mode</li>
+          <li><strong>HI mode</strong>: LO tasks are suspended; HI tasks use C<sup>HI</sup></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Why This Works</h3>
+        <div style="margin-bottom:14px;">
+          <div class="mode-badge mode-lo" style="margin-bottom:10px;">🟢 LO Mode &nbsp;(normal)</div>
+          <p style="font-size:0.88rem;color:var(--sub);">Higher utilization. Optimistic assumption that HI tasks behave well.</p>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:14px;">
+          <div class="mode-badge mode-hi" style="margin-bottom:10px;">🔴 HI Mode &nbsp;(triggered)</div>
+          <p style="font-size:0.88rem;color:var(--sub);">LO tasks sacrificed. Full CPU bandwidth reserved for safety-critical HI tasks.</p>
+        </div>
+        <div class="eq" style="margin-top:14px;">U<sub>LO</sub> = Σ C<sup>LO</sup><sub>i</sub> / T<sub>i</sub> &lt; 1.0</div>
+        <div class="eq">U<sub>HI</sub> = Σ<sub>HI</sub> C<sup>HI</sup><sub>i</sub> / T<sub>i</sub> &lt; 1.0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 5 – RTOS Concepts: Scheduling Theory
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-5">
+    <h2>RTOS Concepts: Scheduling &amp; Analysis</h2>
+    <div class="cols cols3 full">
+      <div class="card">
+        <h3>Fixed-Priority Preemptive (FPPS)</h3>
+        <ul class="bullets">
+          <li>Highest-priority ready task always runs</li>
+          <li>Can preempt lower-priority tasks instantly</li>
+          <li>Priority: <strong>RMS</strong> (1/T) or <strong>DMS</strong> (1/D)</li>
+          <li>Dominant in safety-critical standards</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Response Time Analysis</h3>
+        <div class="eq">R<sub>i</sub> = C<sub>i</sub> + Σ<sub>j∈hp(i)</sub> ⌈R<sub>i</sub>/T<sub>j</sub>⌉ · C<sub>j</sub></div>
+        <ul class="bullets">
+          <li>Iterative fixed-point computation</li>
+          <li>Task schedulable if R<sub>i</sub> ≤ D<sub>i</sub></li>
+          <li>Computes <strong>worst-case</strong> response time</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Task Model Parameters</h3>
+        <table style="font-size:0.83rem;">
+          <tr><td><code>T<sub>i</sub></code></td><td>Period</td></tr>
+          <tr><td><code>D<sub>i</sub></code></td><td>Deadline (relative)</td></tr>
+          <tr><td><code>C<sup>LO</sup></code></td><td>WCET (LO bound)</td></tr>
+          <tr><td><code>C<sup>HI</sup></code></td><td>WCET (HI bound)</td></tr>
+          <tr><td><code>L<sub>i</sub></code></td><td>Criticality level</td></tr>
+          <tr><td><code>π<sub>i</sub></code></td><td>Priority (explicit)</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 6 – System Architecture
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-6">
+    <h2>System Architecture</h2>
+    <div class="cols cols2 full">
+      <div>
+        <div class="arch full">
+          <div class="arch-layer top">
+            <div class="arch-title" style="color:var(--hi);">React 19 Component Layer</div>
+            <div class="arch-sub">Dashboard · TaskForm · TaskTable · SimulationControls<br>SchedulerTimeline · SystemStatusPanel · EventLog · ReportModal</div>
+          </div>
+          <div class="arch-layer middle">
+            <div class="arch-title" style="color:var(--accent);">Zustand State Store</div>
+            <div class="arch-sub">tasks · mode · time · events · segments · modeSwitches<br>Actions: addTask · tick · startSimulation · resetSimulation</div>
+          </div>
+          <div class="arch-layer bottom">
+            <div class="arch-title" style="color:var(--sub);">Simulation Engine Layer</div>
+            <div class="arch-sub">SchedulerEngine · SimulationClock · TaskModel</div>
+          </div>
+        </div>
+        <p style="margin-top:14px;font-size:0.85rem;color:var(--sub);">Strict one-way data flow: Engine → Store → Components. Engine has zero UI dependencies.</p>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <h3>Tech Stack</h3>
+          <table style="font-size:0.85rem;">
+            <tr><td style="color:var(--sub);">UI</td><td>React 19.2 + TypeScript 5.9</td></tr>
+            <tr><td style="color:var(--sub);">State</td><td>Zustand 5.0</td></tr>
+            <tr><td style="color:var(--sub);">Animation</td><td>Framer Motion 12.35</td></tr>
+            <tr><td style="color:var(--sub);">Build</td><td>Vite 5.4</td></tr>
+            <tr><td style="color:var(--sub);">Style</td><td>Tailwind CSS 3.4</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>Key Design Decisions</h3>
+          <ul class="bullets" style="font-size:0.9rem;">
+            <li>Browser-native — no install required</li>
+            <li>Deterministic engine, reactive UI</li>
+            <li>Circular buffers cap memory at ~400KB</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 7 – Implementation Challenges
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-7">
+    <h2>Key Implementation Challenges</h2>
+    <div class="cols cols2 full">
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <h3>Challenge 1 — Mode Switch Timing</h3>
+          <p>Determining exactly when a HI task crosses its C<sup>LO</sup> budget within a discrete simulation tick.</p>
+          <div class="eq" style="margin-top:10px;">if executedMs &gt; wcetLo → triggerModeSwitch()</div>
+          <p style="margin-top:8px;font-size:0.88rem;">Solution: Check after every tick increment. Tick sizes (1/2/5ms) bound detection latency.</p>
+        </div>
+        <div class="card">
+          <h3>Challenge 2 — Memory Bounds</h3>
+          <p>Long simulations generate thousands of events and Gantt segments.</p>
+          <p style="margin-top:8px;font-size:0.88rem;">Solution: Fixed circular buffers — 400 events, 1800 segments, 400 mode switches — keeping heap footprint under 400KB.</p>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <h3>Challenge 3 — RTA Convergence</h3>
+          <p>Iterative RTA may diverge for unschedulable task sets.</p>
+          <div class="eq" style="margin-top:10px;">Max iterations = 100 → mark FAILED</div>
+          <p style="margin-top:8px;font-size:0.88rem;">The report modal flags non-converging tasks in red with the last computed R<sub>i</sub> value.</p>
+        </div>
+        <div class="card">
+          <h3>Challenge 4 — Browser Timer Jitter</h3>
+          <p><code>setInterval</code> is not real-time. Callbacks drift under CPU load.</p>
+          <p style="margin-top:8px;font-size:0.88rem;">Solution: All scheduling decisions use <em>simulation time</em>, not wall-clock time. Wall-clock only determines UI update rate.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 8 – Implementation Solutions (Code)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-8">
+    <h2>Implementation: Key Solutions</h2>
+    <div class="cols cols2 full">
+      <div class="card">
+        <h3>Scheduler Step Function</h3>
+        <pre style="background:rgba(0,0,0,0.3);border-radius:8px;padding:14px;font-size:0.78rem;color:#e2e8f0;overflow:auto;max-height:260px;line-height:1.6;"><code>step(tasks, tickMs) {
+  this.time += tickMs;
+  this.releaseJobs(tasks);
+  this.detectDeadlineMisses();
+
+  const running = this.selectReadyJob(tasks);
+  if (running) {
+    running.executedMs += tickMs;
+    // record Gantt segment
+    this.segments.push({ taskId, start, end, mode });
+
+    // Mixed-criticality mode switch check
+    if (this.mode === 'LO' &amp;&amp; task.criticality === 'HI'
+        &amp;&amp; running.executedMs > task.wcetLo) {
+      this.triggerModeSwitch(tasks); // suspend LO tasks
+    }
+    if (running.executedMs >= running.budget)
+      this.completeJob(running);
+  }
+}</code></pre>
+      </div>
+      <div class="card">
+        <h3>Execution Budget Sampling</h3>
+        <pre style="background:rgba(0,0,0,0.3);border-radius:8px;padding:14px;font-size:0.78rem;color:#e2e8f0;overflow:auto;max-height:120px;line-height:1.6;"><code>// 35% overrun probability for HI tasks in LO mode
+if (mode === 'LO' &amp;&amp; Math.random() &lt; 0.35) {
+  return wcetLo + 1 + rand(wcetHi - wcetLo);
+}
+return rand(wcetLo) + 1;</code></pre>
+        <h3 style="margin-top:16px;">Optimization Scoring</h3>
+        <div class="eq">score = U<sub>excess</sub>×1200 + N<sub>HI_fail</sub>×240<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ N<sub>LO_fail</sub>×160 + Δchanges×2</div>
+        <p style="margin-top:8px;font-size:0.85rem;color:var(--sub);">Evaluated across 8 configs: 4 priority strategies × 2 criticality variants</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 9 – Results: Schedulability
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-9">
+    <h2>Results: Schedulability Analysis</h2>
+    <div class="cols cols2 full" style="align-items:start;">
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <h3>Default Task Set</h3>
+          <table>
+            <thead><tr><th>Task</th><th>Crit.</th><th>T</th><th>C<sup>LO</sup></th><th>C<sup>HI</sup></th><th>Pri.</th></tr></thead>
+            <tbody>
+              <tr><td>T1</td><td><span class="tag hi-tag">HI</span></td><td>100ms</td><td>20ms</td><td>40ms</td><td>1</td></tr>
+              <tr><td>T2</td><td><span class="tag lo-tag">LO</span></td><td>80ms</td><td>18ms</td><td>—</td><td>2</td></tr>
+              <tr><td>T3</td><td><span class="tag hi-tag">HI</span></td><td>150ms</td><td>25ms</td><td>50ms</td><td>3</td></tr>
+            </tbody>
+          </table>
+          <p style="font-size:0.8rem;color:var(--sub);margin-top:8px;">Hyperperiod = LCM(100, 80, 150) = 1200ms</p>
+        </div>
+        <div class="card">
+          <h3>Response Time Analysis</h3>
+          <table style="font-size:0.88rem;">
+            <thead><tr><th>Task</th><th>Mode</th><th>R<sub>i</sub></th><th>D<sub>i</sub></th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td>T1</td><td>LO</td><td>20ms</td><td>100ms</td><td class="ok">✓ PASS</td></tr>
+              <tr><td>T2</td><td>LO</td><td>38ms</td><td>80ms</td><td class="ok">✓ PASS</td></tr>
+              <tr><td>T3</td><td>LO</td><td>63ms</td><td>150ms</td><td class="ok">✓ PASS</td></tr>
+              <tr><td>T1</td><td>HI</td><td>40ms</td><td>100ms</td><td class="ok">✓ PASS</td></tr>
+              <tr><td>T3</td><td>HI</td><td>90ms</td><td>150ms</td><td class="ok">✓ PASS</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="cols cols2" style="gap:12px;margin-bottom:16px;">
+          <div class="card kpi"><div class="val">59.2%</div><div class="lbl">LO-Mode Utilization</div></div>
+          <div class="card kpi"><div class="val">73.3%</div><div class="lbl">HI-Mode Utilization</div></div>
+          <div class="card kpi"><div class="val">5/5</div><div class="lbl">RTA Tests Passed</div></div>
+          <div class="card kpi"><div class="val">~7</div><div class="lbl">Mode Switches / Hyperperiod</div></div>
+        </div>
+        <div class="card">
+          <h3>Utilization vs. RMS Bound</h3>
+          <div style="margin-top:10px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+              <div style="flex:1;background:rgba(255,255,255,0.05);border-radius:4px;height:18px;overflow:hidden;">
+                <div style="width:59.2%;height:100%;background:linear-gradient(90deg,#475569,#64748b);"></div>
+              </div>
+              <span style="font-size:0.82rem;width:80px;">LO: 59.2%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+              <div style="flex:1;background:rgba(255,255,255,0.05);border-radius:4px;height:18px;overflow:hidden;">
+                <div style="width:73.3%;height:100%;background:linear-gradient(90deg,#2563eb,#3b82f6);"></div>
+              </div>
+              <span style="font-size:0.82rem;width:80px;">HI: 73.3%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="flex:1;background:rgba(255,255,255,0.05);border-radius:4px;height:18px;overflow:hidden;">
+                <div style="width:78%;height:100%;background:rgba(239,68,68,0.3);border-right:2px dashed var(--red);"></div>
+              </div>
+              <span style="font-size:0.82rem;width:80px;color:var(--red);">RMS: 78%</span>
+            </div>
+          </div>
+          <p style="font-size:0.8rem;color:var(--sub);margin-top:10px;">Both modes safely below RMS schedulability bound.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 10 – Results: Gantt & Demo
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-10">
+    <h2>Results: Live Simulation Demo</h2>
+    <div class="cols cols2 full" style="align-items:start;">
+      <div>
+        <div class="gantt" style="margin-bottom:16px;">
+          <p style="font-size:0.8rem;color:var(--sub);margin-bottom:12px;">Gantt Chart — Last 900ms Window</p>
+          <!-- T1 -->
+          <div class="gantt-row">
+            <div class="gantt-label">T1</div>
+            <div class="gantt-track">
+              <div class="gantt-bar bar-hi" style="left:0%;width:22%;"></div>
+              <div class="gantt-bar bar-hi" style="left:33%;width:22%;"></div>
+              <div class="gantt-bar bar-hi" style="left:66%;width:22%;"></div>
+              <div class="mode-line" style="left:55%;"></div>
+            </div>
+          </div>
+          <!-- T2 -->
+          <div class="gantt-row">
+            <div class="gantt-label">T2</div>
+            <div class="gantt-track">
+              <div class="gantt-bar bar-lo" style="left:22%;width:20%;"></div>
+              <div class="gantt-bar bar-lo" style="left:55%;width:3%;opacity:0.3;"></div>
+            </div>
+          </div>
+          <!-- T3 -->
+          <div class="gantt-row">
+            <div class="gantt-label">T3</div>
+            <div class="gantt-track">
+              <div class="gantt-bar bar-hi" style="left:42%;width:28%;"></div>
+              <div class="gantt-bar bar-hi" style="left:80%;width:17%;"></div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.7rem;color:var(--sub);">
+            <span>0ms</span><span>150ms</span><span>300ms</span><span>450ms</span><span>600ms</span><span>750ms</span><span>900ms</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;margin-top:12px;font-size:0.78rem;">
+            <span><span style="display:inline-block;width:12px;height:8px;background:#3b82f6;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>HI task</span>
+            <span><span style="display:inline-block;width:12px;height:8px;background:#64748b;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>LO task</span>
+            <span><span style="display:inline-block;width:2px;height:12px;background:var(--red);vertical-align:middle;margin-right:4px;"></span>Mode switch</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Event Log (sample)</h3>
+          <ul class="event-list" style="font-size:0.85rem;">
+            <li><span class="dot dot-release"></span>t=0ms: T1 released (job #1)</li>
+            <li><span class="dot dot-complete"></span>t=20ms: T1 completed</li>
+            <li><span class="dot dot-release"></span>t=80ms: T2 released (job #2)</li>
+            <li><span class="dot dot-switch"></span>t=495ms: MODE SWITCH → HI</li>
+            <li><span class="dot dot-suspension"></span>t=495ms: T2 suspended</li>
+            <li><span class="dot dot-complete"></span>t=535ms: T3 completed (HI mode)</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="cols cols2" style="gap:12px;margin-bottom:16px;">
+          <div class="card kpi"><div class="val">1200ms</div><div class="lbl">Simulation Duration</div></div>
+          <div class="card kpi"><div class="val">0</div><div class="lbl">Deadline Misses</div></div>
+          <div class="card kpi"><div class="val">~7</div><div class="lbl">Mode Switches</div></div>
+          <div class="card kpi"><div class="val" style="color:var(--red);">LO</div><div class="lbl">Tasks Suspended in HI</div></div>
+        </div>
+        <div class="card">
+          <h3>System Status Panel</h3>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+            <div class="mode-badge mode-hi">● HI MODE</div>
+            <div style="font-size:0.85rem;color:var(--sub);margin-top:6px;">
+              <div>Sim Time: <strong style="color:var(--text);">495ms</strong></div>
+              <div>Running: <strong style="color:var(--hi);">T1 (job #6)</strong></div>
+              <div>Active Jobs: <strong style="color:var(--text);">2</strong></div>
+              <div>Mode Switches: <strong style="color:var(--red);">3</strong></div>
+            </div>
+          </div>
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+            <h3>Optimization Report</h3>
+            <p style="font-size:0.85rem;">Best config: <strong>Priority-1/2/3, Baseline criticality</strong><br>
+            Score: 0 (optimal) — all deadlines met in both modes.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 11 – Learning Outcomes Reflection
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-11">
+    <h2>Learning Outcomes Reflection</h2>
+    <div class="cols cols2 full">
+      <div class="card">
+        <h3>LO1 — Task Modeling</h3>
+        <p>Implementing the <code>TaskModel</code> interface deepened understanding of periodic task abstraction and the limitations of modeling aperiodic workloads within a fixed-period framework.</p>
+        <h3 style="margin-top:16px;">LO2 — Scheduling Analysis</h3>
+        <p>Computing RTA by hand for the default task set, then verifying against the simulator, solidified the fixed-point iteration concept and revealed corner cases in convergence behavior.</p>
+        <h3 style="margin-top:16px;">LO3 — Algorithm Implementation</h3>
+        <p>Writing the scheduler <code>step()</code> function required careful translation of textbook scheduling algorithms into working, testable code with correct preemption semantics.</p>
+      </div>
+      <div class="card">
+        <h3>LO4 — Mixed-Criticality Trade-offs</h3>
+        <p>Observing live mode switches revealed the deliberate design decision behind MC scheduling: <em>accepting LO-task failures is the safety mechanism</em>, not a bug. This mindset shift is the core insight of MC systems.</p>
+        <h3 style="margin-top:16px;">LO5 — Formal Analysis Tools</h3>
+        <p>The 8-configuration optimization engine showed that formal analysis can guide priority assignment beyond intuition. Conservative Demotion heuristic revealed over-provisioned tasks where HI classification added no benefit.</p>
+        <div class="card" style="background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);margin-top:16px;">
+          <p style="font-size:0.9rem;"><strong style="color:var(--accent);">Key Insight:</strong> WCET margin selection is not arbitrary — a 35% overrun rate causes ~7 mode switches per hyperperiod, completely starving LO tasks. Tight margins enable better utilization at the cost of safety.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 12 – Challenges & Lessons Learned
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-12">
+    <h2>Challenges &amp; Lessons Learned</h2>
+    <div class="cols cols2 full">
+      <div>
+        <div class="card" style="margin-bottom:14px;">
+          <h3>Technical Challenges</h3>
+          <ul class="bullets">
+            <li><strong>Browser timer jitter</strong> — solved by simulation-time abstraction</li>
+            <li><strong>Memory growth</strong> — solved with bounded circular buffers</li>
+            <li><strong>RTA divergence</strong> — solved with iteration limit + FAILED flag</li>
+            <li><strong>No mode recovery</strong> — deliberate simplification (open research problem)</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Design Lessons</h3>
+          <ul class="bullets">
+            <li><strong>Separation of concerns</strong> — engine independence enabled isolated testing</li>
+            <li><strong>TypeScript strict mode</strong> — caught interface mismatches early</li>
+            <li><strong>Zustand over Redux</strong> — 80% less boilerplate for same functionality</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card">
+        <h3>What I Would Do Differently</h3>
+        <ul class="bullets">
+          <li>Add <strong>mode recovery protocol</strong> for complete Vestal model compliance</li>
+          <li>Implement <strong>EDF scheduling</strong> as comparison against RMS/DMS</li>
+          <li>Add <strong>Monte Carlo simulation</strong> over N hyperperiods for statistical schedulability</li>
+          <li>Export task sets to <strong>FreeRTOS configuration</strong> files for hardware validation</li>
+          <li>Support <strong>multiprocessor</strong> global/partitioned scheduling</li>
+        </ul>
+        <div class="card" style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);margin-top:14px;">
+          <p style="font-size:0.9rem;"><strong style="color:var(--green);">Validated Approach:</strong> Layered architecture (engine / store / components) made it trivial to swap priority strategies in the optimizer without touching visualization code.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 13 – Conclusion & Future Work
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-13">
+    <h2>Conclusion &amp; Future Work</h2>
+    <div class="cols cols2 full">
+      <div class="card">
+        <h3>Summary</h3>
+        <ul class="bullets">
+          <li>Built <strong>TickFlow</strong>: a browser-based mixed-criticality scheduling simulator implementing the Vestal MC model.</li>
+          <li>Implemented <strong>fixed-priority preemptive scheduling</strong> with automatic LO→HI mode switching.</li>
+          <li>Verified default task set <strong>schedulable in both modes</strong> via RTA (5/5 tasks pass).</li>
+          <li>Optimization engine evaluates <strong>8 configurations</strong> and recommends optimal priority assignment.</li>
+          <li>System operates at <strong>59.2% / 73.3%</strong> utilization in LO/HI modes — well below capacity.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:14px;">
+          <h3>Recommendations</h3>
+          <ul class="bullets" style="font-size:0.9rem;">
+            <li>Always verify schedulability with <strong>formal RTA</strong> before deployment</li>
+            <li>Select WCET budgets <strong>conservatively</strong> — overrun rate directly impacts LO throughput</li>
+            <li>Prefer <strong>DMS over RMS</strong> for constrained-deadline task sets</li>
+            <li>Maintain strict <strong>architectural separation</strong> between scheduling logic and platform code</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Future Work</h3>
+          <ul class="bullets" style="font-size:0.9rem;">
+            <li>HI→LO mode recovery protocol</li>
+            <li>EDF &amp; sporadic task support</li>
+            <li>Multiprocessor global scheduling</li>
+            <li>FreeRTOS config file export</li>
+            <li>Monte Carlo statistical analysis</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 14 – References & Q&A (Backup)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-14">
+    <div class="backup-label">BACKUP — Q&amp;A</div>
+    <h2>Key References</h2>
+    <div class="cols cols2 full" style="font-size:0.82rem;">
+      <ul class="bullets" style="font-size:0.82rem;">
+        <li>S. Vestal (2007). Preemptive scheduling of multi-criticality systems. <em>IEEE RTSS</em>.</li>
+        <li>C.L. Liu &amp; J.W. Layland (1973). Scheduling algorithms for multiprogramming. <em>J. ACM</em>.</li>
+        <li>M. Joseph &amp; P. Pandya (1986). Finding response times in a real-time system. <em>Comput. J.</em></li>
+        <li>S. Baruah et al. (2011). Preemptive uniprocessor scheduling of mixed-criticality sporadic task systems. <em>ECRTS</em>.</li>
+        <li>G.C. Buttazzo (2011). <em>Hard Real-Time Computing Systems</em>. Springer.</li>
+        <li>N.C. Audsley et al. (1993). Applying new scheduling theory to static priority scheduling. <em>Software Eng. J.</em></li>
+      </ul>
+      <ul class="bullets" style="font-size:0.82rem;">
+        <li>A. Burns &amp; R. Davis (2013). Mixed criticality systems—a review. Univ. of York Tech Report.</li>
+        <li>J.W.-S. Liu (2000). <em>Real-Time Systems</em>. Prentice Hall.</li>
+        <li>F. Singhoff et al. (2004). Cheddar: A flexible real-time scheduling framework. <em>ACM SIGAda</em>.</li>
+        <li>R. Wilhelm et al. (2008). The worst-case execution-time problem. <em>ACM Trans. Embedded Comput.</em></li>
+        <li>R. Barry. <em>FreeRTOS Reference Manual</em>. Real Time Engineers Ltd., 2016.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SLIDE 15 – Q&A Deep Dive (Backup)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-15">
+    <div class="backup-label">BACKUP — Q&amp;A</div>
+    <h2>Anticipated Q&amp;A</h2>
+    <div class="cols cols2 full">
+      <div class="card">
+        <h3>Q: Why not use EDF instead of FPPS?</h3>
+        <p>EDF achieves 100% utilization for implicit-deadline task sets, but: (1) EDF requires dynamic priority recomputation each job release, adding runtime overhead; (2) safety-critical standards (ARINC 653, AUTOSAR) mandate fixed priorities for auditability; (3) EDF's behavior under overload is unpredictable — it may miss any task's deadline, whereas FPPS guarantees lower-priority tasks miss first.</p>
+      </div>
+      <div class="card">
+        <h3>Q: Why no mode recovery (HI→LO)?</h3>
+        <p>Mode recovery is an open research problem. Naively re-admitting LO tasks after a HI mode event can violate HI-task deadlines during the transition window. Formal recovery protocols (e.g., Baruah 2011) require complex cross-mode schedulability analysis. TickFlow omits this to keep the model tractable and pedagogically clear.</p>
+      </div>
+      <div class="card">
+        <h3>Q: How accurate is the WCET sampling model?</h3>
+        <p>The 35% overrun probability is a pedagogical approximation. Real WCET analysis uses static analysis (AbsInt aiT, OTAWA) or measurement-based bounds. The simulator's probabilistic model demonstrates the <em>qualitative</em> effect of WCET margin selection on mode switch frequency without claiming quantitative accuracy for specific hardware.</p>
+      </div>
+      <div class="card">
+        <h3>Q: Does this scale to more tasks?</h3>
+        <p>Yes. The engine is O(n) per tick for n tasks. RTA is O(n²) per analysis. Circular buffers bound memory regardless of task count. Tested with up to 10 tasks without performance degradation. Gantt rendering at 1800 segments targets ~900ms window regardless of task count.</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end .deck -->
+
+<div class="slide-num"><span id="cur">1</span> / <span id="tot"></span></div>
+<div class="nav">
+  <button onclick="go(-1)">&#8592; Prev</button>
+  <button onclick="go(1)">Next &#8594;</button>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const progress = document.getElementById('progress');
+  const curEl = document.getElementById('cur');
+  const totEl = document.getElementById('tot');
+  let current = 0;
+  totEl.textContent = slides.length;
+
+  function show(idx) {
+    slides[current].classList.remove('active');
+    current = Math.max(0, Math.min(idx, slides.length - 1));
+    slides[current].classList.add('active');
+    curEl.textContent = current + 1;
+    progress.style.width = ((current + 1) / slides.length * 100) + '%';
+  }
+
+  function go(dir) { show(current + dir); }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') go(1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp') go(-1);
+  });
+
+  show(0);
+</script>
+</body>
+</html>

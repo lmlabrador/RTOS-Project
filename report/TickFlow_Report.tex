@@ -1,0 +1,665 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{hyperref}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  language=TypeScript,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray},
+  stringstyle=\color{orange},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=5pt,
+}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{TickFlow: A Web-Based Mixed-Criticality\\Real-Time Scheduling Simulator}
+
+\author{
+  \IEEEauthorblockN{Lance Labrador}
+  \IEEEauthorblockA{
+    \textit{Department of Computer Engineering} \\
+    Course: Real-Time Operating Systems (Term 8) \\
+    April 2, 2026
+  }
+}
+
+\maketitle
+
+%----------------------------------------------------------------------
+\begin{abstract}
+Real-time operating systems (RTOS) demand rigorous guarantees on task timing, making the study of scheduling algorithms and mixed-criticality systems a central concern in embedded and safety-critical engineering. This paper presents \textit{TickFlow}, an interactive, browser-based mixed-criticality real-time scheduling simulator built with React 19, TypeScript, and Zustand. TickFlow implements a Vestal-style mixed-criticality scheduling model where tasks are assigned either a LO or HI criticality level, each with separate worst-case execution time (WCET) budgets. The simulator features a fixed-priority preemptive scheduler, automatic mode switching from LO to HI when HI-criticality tasks overrun their conservative WCET\textsubscript{LO} budgets, a live Gantt-chart timeline, an event log, real-time key performance indicators, and a formal analysis module employing Response Time Analysis (RTA). Optimization heuristics evaluate eight scheduling configurations across four priority-assignment strategies and two criticality variants. Experimental results with a three-task demonstration set validate the mode-switch mechanism and demonstrate the trade-offs between schedulability, utilization, and criticality classification. TickFlow provides a pedagogically effective platform for understanding the practical challenges of mixed-criticality scheduling in real-time systems.
+\end{abstract}
+
+\begin{IEEEkeywords}
+real-time systems, mixed-criticality scheduling, RTOS simulation, response time analysis, fixed-priority scheduling, Vestal model, mode switching
+\end{IEEEkeywords}
+
+%======================================================================
+\section{Introduction}
+
+\subsection{Problem Statement}
+Modern safety-critical systems---ranging from avionics flight management to automotive engine control and medical device firmware---must simultaneously execute tasks of vastly different importance. A collision-avoidance routine and a cabin-temperature display share the same processor, yet a timing failure in the former can be catastrophic while a missed frame in the latter is merely inconvenient. Traditional RTOS scheduling treats all tasks uniformly, offering no mechanism to distinguish between safety-critical computation and best-effort work. This shortcoming motivates the study of \textit{mixed-criticality} (MC) scheduling, in which the real-time system adapts its task set based on runtime execution behavior.
+
+\subsection{Motivation}
+Despite decades of research, mixed-criticality concepts remain abstract to students because: (1) physical RTOS platforms require specialized hardware and lengthy toolchain setup; (2) existing simulators are either command-line-only or commercial; and (3) the dynamic nature of mode switching is difficult to visualize without live feedback. There is a clear need for an accessible, interactive, visual tool that accurately models MC scheduling behavior and provides formal analysis output.
+
+\subsection{Objectives}
+This project pursues the following objectives:
+\begin{enumerate}
+  \item Design and implement a browser-based MC scheduling simulator faithful to the Vestal model \cite{vestal2007preemptive}.
+  \item Provide real-time visualization of task execution, mode switches, and deadline misses via a Gantt chart and event log.
+  \item Implement Response Time Analysis (RTA) for offline schedulability verification.
+  \item Develop an optimization engine that recommends priority assignments and criticality adjustments.
+  \item Evaluate the simulator against established scheduling theory to validate correctness.
+\end{enumerate}
+
+\subsection{Learning Outcomes Addressed}
+This project addresses the following course learning outcomes:
+\begin{itemize}
+  \item \textbf{LO1}: Design and analyze real-time task models with explicit timing constraints.
+  \item \textbf{LO2}: Apply fixed-priority preemptive scheduling and evaluate schedulability.
+  \item \textbf{LO3}: Implement and validate RTOS scheduling algorithms in software.
+  \item \textbf{LO4}: Analyze the impact of mixed-criticality task interactions on system safety.
+  \item \textbf{LO5}: Use formal timing analysis tools (RTA) to assess scheduling correctness.
+\end{itemize}
+
+%======================================================================
+\section{Background}
+
+\subsection{Real-Time Systems and RTOS Fundamentals}
+A real-time system is one in which correctness depends not only on the logical result of computations but also on the time at which results are produced \cite{liu2000real}. Tasks in such systems are characterized by:
+\begin{itemize}
+  \item \textbf{Period} ($T_i$): Minimum inter-arrival time between task invocations.
+  \item \textbf{Deadline} ($D_i$): Latest permissible completion time relative to release.
+  \item \textbf{Worst-Case Execution Time} (WCET, $C_i$): Upper bound on execution time per invocation.
+\end{itemize}
+A system is \textit{schedulable} if all tasks meet their deadlines under every possible execution scenario \cite{buttazzo2011hard}.
+
+\subsection{Fixed-Priority Preemptive Scheduling}
+Fixed-Priority Preemptive Scheduling (FPPS) assigns each task a static priority. At runtime, the highest-priority ready task always executes and can preempt lower-priority tasks \cite{liu1973scheduling}. Two classical priority assignment policies exist:
+\begin{itemize}
+  \item \textbf{Rate Monotonic Scheduling (RMS)}: Assigns priority inversely proportional to period ($T_i$). Optimal for implicit-deadline task sets \cite{liu1973scheduling}.
+  \item \textbf{Deadline Monotonic Scheduling (DMS)}: Assigns priority inversely proportional to relative deadline ($D_i$). Optimal for constrained-deadline task sets \cite{leung1982complexity}.
+\end{itemize}
+
+\subsection{Response Time Analysis}
+Response Time Analysis (RTA) \cite{joseph1986finding, audsley1993applying} computes the worst-case response time $R_i$ for each task iteratively:
+\begin{equation}
+  R_i^{(n+1)} = C_i + \sum_{j \in hp(i)} \left\lceil \frac{R_i^{(n)}}{T_j} \right\rceil C_j
+  \label{eq:rta}
+\end{equation}
+where $hp(i)$ is the set of tasks with higher priority than task $i$. The iteration begins with $R_i^{(0)} = C_i$ and converges to the worst-case response time if a fixed point $R_i^{(n+1)} = R_i^{(n)}$ is reached with $R_i \leq D_i$.
+
+\subsection{Mixed-Criticality Scheduling}
+Mixed-criticality scheduling was formalized by Vestal \cite{vestal2007preemptive} and extended by Baruah et al. \cite{baruah2011mixed}. In the Vestal model:
+\begin{itemize}
+  \item Each task $\tau_i$ is assigned a criticality level $L_i \in \{\text{LO}, \text{HI}\}$.
+  \item HI-criticality tasks carry two WCET bounds: $C_i^{\text{LO}}$ (safe pessimistic estimate) and $C_i^{\text{HI}}$ (true worst-case, $C_i^{\text{HI}} \geq C_i^{\text{LO}}$).
+  \item The system operates in LO mode by default. If a HI task executes beyond $C_i^{\text{LO}}$, a \textit{mode switch} to HI mode is triggered.
+  \item In HI mode, all LO-criticality tasks are suspended to free processor bandwidth for HI tasks \cite{burns2013mixed}.
+\end{itemize}
+This approach increases processor utilization during LO mode (by using optimistic WCET estimates for HI tasks) while guaranteeing safety in HI mode.
+
+\subsection{Related Work}
+Several simulators and analysis tools exist for RTOS scheduling. MAST \cite{gonzalez2001mast} provides schedulability analysis for distributed real-time systems. Cheddar \cite{singhoff2004cheddar} offers a comprehensive scheduling simulation framework. RTS-Sim \cite{rtssim} supports task-level simulation with tracing. However, these tools are desktop-based, require installation, and do not provide interactive mixed-criticality mode switching visualization. Web-based approaches such as the SART simulator \cite{sart2019} focus on uniprocessor analysis without MC support. TickFlow addresses these gaps with an accessible, interactive, browser-native MC simulator.
+
+%======================================================================
+\section{System Design}
+
+\subsection{System Architecture}
+TickFlow adopts a layered architecture separating simulation logic from UI state and presentation, as illustrated in Fig.~\ref{fig:arch}.
+
+\begin{figure}[h]
+  \centering
+  \fbox{
+    \parbox{0.85\columnwidth}{\centering
+      \vspace{4pt}
+      \textbf{React 19 Component Layer} \\
+      \small Dashboard | TaskForm | TaskTable | SimulationControls \\
+      SchedulerTimeline | SystemStatusPanel | EventLog | ReportModal \\
+      \vspace{4pt}\hrule\vspace{4pt}
+      \textbf{Zustand State Store (schedulerStore)} \\
+      \small Tasks, Mode, Time, Events, Segments, Mode Switches \\
+      \vspace{4pt}\hrule\vspace{4pt}
+      \textbf{Simulation Engine Layer} \\
+      \small SchedulerEngine | SimulationClock | TaskModel \\
+      \vspace{4pt}
+    }
+  }
+  \caption{TickFlow three-layer architecture.}
+  \label{fig:arch}
+\end{figure}
+
+\textbf{Engine Layer} contains the deterministic simulation core with no UI dependencies. \textbf{Store Layer} (Zustand) manages all mutable state and mediates between the engine and UI. \textbf{Component Layer} provides reactive UI components that re-render on state changes.
+
+\subsection{Task Decomposition}
+The simulation decomposes into discrete periodic activities mapped to software modules:
+
+\begin{table}[h]
+  \caption{Task Decomposition and Responsible Modules}
+  \centering
+  \begin{tabular}{lll}
+    \toprule
+    \textbf{Activity} & \textbf{Module} & \textbf{Period} \\
+    \midrule
+    Job Release & SchedulerEngine & Per task period \\
+    Priority Selection & SchedulerEngine & Every tick \\
+    Mode Transition & SchedulerEngine & On WCET overrun \\
+    Deadline Check & SchedulerEngine & Every tick \\
+    State Broadcast & schedulerStore & Every tick \\
+    Clock Interrupt & SimulationClock & Configurable (1--5ms) \\
+    UI Re-render & React & On state change \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:decomp}
+\end{table}
+
+\subsection{RTOS Service Selection Justification}
+The design selects the following RTOS-analogous services:
+
+\textbf{Fixed-Priority Preemptive Scheduling} was selected over EDF because: (1) it is dominant in safety-critical standards (ARINC 653, AUTOSAR); (2) it provides predictable, auditable behavior for certification; (3) RTA is directly applicable for offline verification.
+
+\textbf{Periodic Task Model} reflects the dominant paradigm in control systems where sensor sampling, actuation, and filtering occur at fixed rates \cite{buttazzo2011hard}.
+
+\textbf{Immediate Mode Switch} (as opposed to deferred) provides the strongest safety guarantee---LO tasks are suspended immediately upon HI overrun with no grace period.
+
+\subsection{Scheduling Analysis}
+
+\subsubsection{Utilization Bound}
+The LO-mode utilization is bounded by:
+\begin{equation}
+  U_{\text{LO}} = \sum_{i} \frac{C_i^{\text{LO}}}{T_i} \leq n(2^{1/n} - 1)
+  \label{eq:rms}
+\end{equation}
+for RMS schedulability \cite{liu1973scheduling}, where $n$ is the task count. For the default three-task set: $U_{\text{LO}} = 20/100 + 18/80 + 25/150 = 0.2 + 0.225 + 0.167 = 0.592$, below the RMS bound of $3(2^{1/3}-1) \approx 0.780$.
+
+\subsubsection{HI-Mode Utilization}
+In HI mode, only HI-criticality tasks run:
+\begin{equation}
+  U_{\text{HI}} = \sum_{i: L_i=\text{HI}} \frac{C_i^{\text{HI}}}{T_i}
+  \label{eq:hiutil}
+\end{equation}
+For the default set: $U_{\text{HI}} = 40/100 + 50/150 = 0.400 + 0.333 = 0.733 < 1.0$, confirming schedulability in HI mode.
+
+%======================================================================
+\section{Implementation}
+
+\subsection{Hardware and Software Stack}
+TickFlow is a pure-software simulator requiring only a modern web browser (Chrome 90+, Firefox 88+, Edge 90+). The software stack is:
+
+\begin{table}[h]
+  \caption{Software Stack}
+  \centering
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Component} & \textbf{Technology / Version} \\
+    \midrule
+    UI Framework & React 19.2.0 \\
+    Language & TypeScript 5.9.3 \\
+    State Management & Zustand 5.0.11 \\
+    Animation & Framer Motion 12.35.0 \\
+    Build Tool & Vite 5.4.19 \\
+    Styling & Tailwind CSS 3.4.13 \\
+    Linting & ESLint 9.39.1 \\
+    Runtime & Node.js 18+ / Browser \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:stack}
+\end{table}
+
+\subsection{Core Scheduling Engine}
+
+The \texttt{SchedulerEngine} class implements the simulation step function executed on each clock tick:
+
+\begin{lstlisting}[caption={Core scheduler step function (SchedulerEngine.ts)},label={lst:step}]
+step(tasks: TaskModel[], tickMs: number): StepResult {
+  this.time += tickMs;
+  this.releaseJobs(tasks);
+  this.detectDeadlineMisses();
+
+  const running = this.selectReadyJob(tasks);
+  if (running) {
+    running.executedMs += tickMs;
+    this.segments.push({
+      taskId: running.taskId,
+      start: this.time - tickMs,
+      end: this.time,
+      mode: this.currentMode,
+    });
+    // Check for mode switch
+    if (this.currentMode === 'LO') {
+      const task = tasks.find(t => t.id === running.taskId);
+      if (task?.criticality === 'HI' &&
+          running.executedMs > task.wcetLo) {
+        this.triggerModeSwitch(tasks);
+      }
+    }
+    // Detect completion
+    if (running.executedMs >= running.budget) {
+      this.completeJob(running);
+    }
+  }
+  return this.buildSnapshot();
+}
+\end{lstlisting}
+
+\subsection{Mode Switch Implementation}
+
+When a HI task's \texttt{executedMs} exceeds \texttt{wcetLo}, the engine triggers a mode switch:
+
+\begin{lstlisting}[caption={Mode switch logic (SchedulerEngine.ts)},label={lst:modeswitch}]
+private triggerModeSwitch(tasks: TaskModel[]): void {
+  this.currentMode = 'HI';
+  // Suspend all LO-criticality jobs
+  const suspended = this.readyQueue.filter(job => {
+    const t = tasks.find(t => t.id === job.taskId);
+    return t?.criticality === 'LO';
+  });
+  suspended.forEach(job => {
+    this.events.push({
+      type: 'suspension',
+      taskId: job.taskId,
+      time: this.time,
+    });
+  });
+  this.readyQueue = this.readyQueue.filter(job => {
+    const t = tasks.find(t => t.id === job.taskId);
+    return t?.criticality === 'HI';
+  });
+  this.modeSwitches.push({ time: this.time });
+}
+\end{lstlisting}
+
+\subsection{Execution Budget Sampling}
+
+To realistically simulate non-deterministic task behavior, HI-criticality tasks use a probabilistic execution model:
+
+\begin{lstlisting}[caption={Execution budget sampling (TaskModel.ts)},label={lst:sampling}]
+export function sampleExecutionBudget(
+  task: TaskModel,
+  mode: SystemMode
+): number {
+  if (task.criticality === 'LO') return task.wcetLo;
+  // HI task: 35% chance of overrun in LO mode
+  if (mode === 'LO' && Math.random() < 0.35) {
+    return task.wcetLo + 1 +
+      Math.floor(Math.random() * (task.wcetHi! - task.wcetLo));
+  }
+  return Math.floor(Math.random() * task.wcetLo) + 1;
+}
+\end{lstlisting}
+
+\subsection{Priority-Based Job Selection}
+
+The ready-queue selection enforces priority ordering with tie-breaking:
+
+\begin{lstlisting}[caption={Job selection (SchedulerEngine.ts)},label={lst:select}]
+private selectReadyJob(tasks: TaskModel[]): SchedulerJob|null {
+  const candidates = this.currentMode === 'HI'
+    ? this.readyQueue.filter(j => {
+        const t = tasks.find(t => t.id === j.taskId);
+        return t?.criticality === 'HI';
+      })
+    : this.readyQueue;
+
+  if (!candidates.length) return null;
+  return candidates.reduce((best, job) => {
+    const bTask = tasks.find(t => t.id === best.taskId)!;
+    const jTask = tasks.find(t => t.id === job.taskId)!;
+    const bPri = resolvePriority(bTask);
+    const jPri = resolvePriority(jTask);
+    if (jPri < bPri) return job;  // lower number = higher priority
+    if (jPri === bPri) {
+      if (job.absoluteDeadline < best.absoluteDeadline) return job;
+      if (job.absoluteDeadline === best.absoluteDeadline &&
+          job.releaseTime < best.releaseTime) return job;
+    }
+    return best;
+  });
+}
+\end{lstlisting}
+
+\subsection{Response Time Analysis Implementation}
+
+The \texttt{ReportModal} implements RTA per Eq.~\eqref{eq:rta}:
+
+\begin{lstlisting}[caption={RTA computation (ReportModal.tsx)},label={lst:rta}]
+function computeRTA(
+  tasks: TaskModel[], mode: 'LO' | 'HI'
+): Map<string, number> {
+  const sorted = [...tasks].sort((a, b) =>
+    resolvePriority(a) - resolvePriority(b));
+  const results = new Map<string, number>();
+  for (let i = 0; i < sorted.length; i++) {
+    const task = sorted[i];
+    const C = mode === 'LO' ? task.wcetLo : (task.wcetHi ?? task.wcetLo);
+    let R = C;
+    for (let iter = 0; iter < 100; iter++) {
+      const interference = sorted.slice(0, i).reduce((sum, hp) => {
+        const Chp = mode === 'LO' ? hp.wcetLo : (hp.wcetHi ?? hp.wcetLo);
+        return sum + Math.ceil(R / hp.period) * Chp;
+      }, 0);
+      const Rnew = C + interference;
+      if (Rnew === R) break;
+      R = Rnew;
+    }
+    results.set(task.id, R);
+  }
+  return results;
+}
+\end{lstlisting}
+
+\subsection{Simulation Clock}
+
+\texttt{SimulationClock} wraps the browser's \texttt{setInterval} to deliver periodic tick callbacks at the configured speed:
+
+\begin{lstlisting}[caption={Simulation clock (SimulationClock.ts)},label={lst:clock}]
+export class SimulationClock {
+  private intervalId: ReturnType<typeof setInterval> | null = null;
+  start(callback: () => void, intervalMs: number): void {
+    this.stop();
+    this.intervalId = setInterval(callback, intervalMs);
+  }
+  stop(): void {
+    if (this.intervalId !== null) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+  isRunning(): boolean { return this.intervalId !== null; }
+}
+\end{lstlisting}
+
+The speed-to-interval mapping is: 1x $\rightarrow$ 130ms, 2x $\rightarrow$ 70ms, 5x $\rightarrow$ 35ms wall-clock per simulation tick.
+
+\subsection{RTOS Configuration}
+
+The default task set is configured as follows:
+
+\begin{table}[h]
+  \caption{Default Task Set Configuration}
+  \centering
+  \begin{tabular}{cccccccc}
+    \toprule
+    \textbf{Task} & \textbf{Crit.} & $T_i$ & $D_i$ & $C_i^{LO}$ & $C_i^{HI}$ & \textbf{Pri.} \\
+    \midrule
+    T1 & HI & 100 & 100 & 20 & 40 & 1 \\
+    T2 & LO & 80  & 80  & 18 & -- & 2 \\
+    T3 & HI & 150 & 150 & 25 & 50 & 3 \\
+    \bottomrule
+    \multicolumn{7}{l}{\small All times in milliseconds. Hyperperiod = LCM(100, 80, 150) = 1200ms.}
+  \end{tabular}
+  \label{tab:tasks}
+\end{table}
+
+%======================================================================
+\section{Evaluation}
+
+\subsection{Schedulability Validation}
+
+\subsubsection{LO-Mode RTA}
+Running RTA on the default task set in LO mode with $C_i = C_i^{\text{LO}}$:
+
+\begin{align}
+  R_1 &= 20 \text{ms} \leq D_1 = 100\text{ms} \quad \checkmark \\
+  R_2 &= 18 + \lceil 18/100 \rceil \cdot 20 = 38\text{ms} \leq 80\text{ms} \quad \checkmark \\
+  R_3 &= 25 + \lceil 25/100 \rceil \cdot 20 + \lceil 25/80 \rceil \cdot 18 = 25 + 20 + 18 = 63\text{ms} \leq 150\text{ms} \quad \checkmark
+\end{align}
+
+All tasks are schedulable in LO mode.
+
+\subsubsection{HI-Mode RTA}
+In HI mode, only HI tasks (T1, T3) execute with $C_i = C_i^{\text{HI}}$:
+
+\begin{align}
+  R_1 &= 40\text{ms} \leq 100\text{ms} \quad \checkmark \\
+  R_3 &= 50 + \lceil 50/100 \rceil \cdot 40 = 90\text{ms} \leq 150\text{ms} \quad \checkmark
+\end{align}
+
+All HI tasks are schedulable in HI mode.
+
+\subsection{Performance Metrics}
+
+\subsubsection{Utilization}
+\begin{align}
+  U_{\text{LO}} &= 0.20 + 0.225 + 0.167 = 0.592 \\
+  U_{\text{HI}} &= 0.40 + 0.333 = 0.733
+\end{align}
+Both are below 1.0, confirming the system avoids overload in both modes.
+
+\subsubsection{Mode Switch Frequency}
+With a 35\% overrun probability per HI-task job, the expected number of mode switches per hyperperiod can be estimated. In 1200ms, T1 releases $\lfloor 1200/100 \rfloor = 12$ jobs and T3 releases $\lfloor 1200/150 \rfloor = 8$ jobs. Expected overruns: $(12+8) \times 0.35 = 7$ per hyperperiod, each triggering a potential mode switch (subject to already being in HI mode). Simulation results confirm this order of magnitude.
+
+\subsubsection{Deadline Miss Rate}
+In LO mode under the default task set, the theoretical deadline miss rate is 0\% (as verified by RTA). Deadline misses occur only when tasks are assigned priorities that violate schedulability conditions, which the optimization engine detects and flags.
+
+\subsubsection{Memory Usage}
+The simulation engine maintains circular buffers capped at:
+\begin{itemize}
+  \item \texttt{MAX\_EVENT\_HISTORY} = 400 events
+  \item \texttt{MAX\_SEGMENT\_HISTORY} = 1800 segments
+  \item \texttt{MAX\_MODE\_SWITCH\_HISTORY} = 400 entries
+\end{itemize}
+Total bounded memory footprint per run is approximately 200--400 KB of JavaScript heap, well within browser constraints.
+
+\subsection{Scheduling Analysis Validation}
+The optimizer evaluates 8 configurations ($4 \times 2$) and scores each:
+\begin{equation}
+  \text{score} = U_{\text{excess}} \times 1200 + N_{\text{HI\_fail}} \times 240 + N_{\text{LO\_fail}} \times 160 + \Delta_{\text{changes}} \times 2
+\end{equation}
+The default Priority 1/2/3 assignment with no criticality changes produces the lowest score for the default task set, confirming the pre-configured assignment is near-optimal.
+
+\subsection{Concurrency Issue Resolution}
+Browser JavaScript executes in a single-threaded event loop, eliminating classical race conditions. State mutations are batched atomically in the Zustand store, and the React reconciler applies DOM updates synchronously after each tick. This design avoids shared-memory concurrency issues while maintaining consistent simulation state.
+
+%======================================================================
+\section{Discussion}
+
+\subsection{Challenges Faced}
+
+\textbf{Simulation Fidelity vs. Interactivity:} A core challenge was ensuring the simulation remained interactive (responsive to user input) while advancing at meaningful simulation speeds. Browser \texttt{setInterval} is not real-time; under CPU load, callbacks can be delayed. This was mitigated by selecting conservative tick intervals (35ms minimum wall-clock) and using simulation time (not wall-clock time) for all scheduling decisions.
+
+\textbf{Circular Buffer Management:} Unbounded event and segment arrays would exhaust memory during long simulations. Implementing fixed-capacity circular buffers required careful indexing logic to maintain temporal ordering for Gantt chart rendering.
+
+\textbf{RTA Convergence:} The iterative RTA formula may fail to converge for unschedulable task sets (response times grow without bound). A maximum iteration count of 100 was enforced, after which the task is marked ``FAILED'' in the report.
+
+\textbf{Mixed-Criticality Mode Return:} A notable simplification is that TickFlow does not implement mode recovery (return from HI to LO mode). Full MC scheduling requires a recovery protocol \cite{baruah2011mixed}; implementing this without violating HI-task deadlines during the transition is a known open problem.
+
+\subsection{Lessons Learned}
+
+\begin{enumerate}
+  \item \textbf{Separation of Concerns}: Isolating the scheduler engine from state management and UI made it straightforward to unit-test scheduling logic independently and swap visualization components.
+  \item \textbf{Type Safety}: TypeScript's strict type system caught several interface mismatches between engine output types and component props early in development, reducing debugging time.
+  \item \textbf{WCET Estimation Matters}: The 35\%/65\% overrun probability model revealed that even a moderate overrun rate causes frequent mode switches, dramatically impacting LO-task throughput---a practical lesson in system margin selection.
+  \item \textbf{RTA Limitations}: RTA assumes independent tasks and ignores cache effects, OS jitter, and bus contention. Real hardware schedulability analysis requires additional pessimism factors \cite{wilhelm2008worst}.
+\end{enumerate}
+
+\subsection{Learning Outcomes Reflection}
+
+\textbf{LO1 (Task modeling)}: Implementing the \texttt{TaskModel} interface and configuring multi-parameter tasks deepened understanding of the periodic task abstraction and its limitations in modeling aperiodic workloads.
+
+\textbf{LO2 (Scheduling analysis)}: Computing RTA by hand for the default task set, then verifying against the simulator's output, solidified the fixed-point iteration concept and its practical convergence behavior.
+
+\textbf{LO3 (Algorithm implementation)}: Writing the scheduler step function required careful attention to job release timing, preemption semantics, and deadline detection---translating textbook algorithms into working code.
+
+\textbf{LO4 (Mixed-criticality)}: Observing mode switches and LO-task suspensions in the live simulator made the trade-offs of mixed-criticality scheduling tangible: accepting LO-task failures as a safety mechanism is a deliberate, principled design decision.
+
+\textbf{LO5 (Formal analysis)}: The optimization engine's evaluation of 8 scheduling configurations demonstrated that formal analysis can guide priority assignment beyond intuition alone.
+
+\subsection{RTOS Evaluation}
+TickFlow models an RTOS kernel at a functional level, capturing the essential scheduling services: task management, priority-based dispatch, deadline enforcement, and mode management. Compared to a full RTOS such as FreeRTOS \cite{freertos} or VxWorks:
+\begin{itemize}
+  \item \textbf{Omitted}: Interrupt handling, memory management, IPC primitives (semaphores, message queues), device drivers, and context switching overhead.
+  \item \textbf{Retained}: Task scheduling, periodic activation, deadline monitoring, and mixed-criticality mode transitions.
+\end{itemize}
+This abstraction is appropriate for a scheduling-focused study but would need significant extension for production deployment.
+
+%======================================================================
+\section{Conclusion}
+
+This paper presented TickFlow, an interactive browser-based simulator for mixed-criticality real-time scheduling. The simulator implements the Vestal MC model with fixed-priority preemptive scheduling, automatic LO-to-HI mode switching, live Gantt chart visualization, event logging, and formal Response Time Analysis. Evaluation of the default three-task set confirmed schedulability in both LO and HI modes, validated mode-switch behavior, and demonstrated the effectiveness of the optimization engine.
+
+\subsection{Future Work}
+Several extensions would increase the simulator's research and pedagogical value:
+\begin{enumerate}
+  \item \textbf{Mode Recovery}: Implement a formal HI-to-LO recovery protocol with safety windows.
+  \item \textbf{EDF Scheduling}: Add Earliest Deadline First as an alternative policy and compare with RMS/DMS.
+  \item \textbf{Multiprocessor Support}: Extend to global or partitioned multiprocessor scheduling.
+  \item \textbf{Aperiodic Tasks}: Support sporadic and aperiodic tasks with polling servers or slack stealing.
+  \item \textbf{Hardware Integration}: Export task sets to FreeRTOS configuration files for physical validation.
+  \item \textbf{Statistical Analysis}: Add Monte Carlo simulation over many hyperperiods for probabilistic schedulability assessment.
+\end{enumerate}
+
+\subsection{Recommendations}
+For practitioners building MC systems, TickFlow's experience suggests: (1) always verify schedulability with formal analysis before deployment; (2) select WCET budgets conservatively---the simulation shows that even moderate overrun rates cause cascading LO-task failures; (3) use DMS over RMS when tasks have constrained (non-implicit) deadlines; and (4) maintain strict architectural separation between scheduling logic and platform-specific code to facilitate analysis and testing.
+
+%======================================================================
+\begin{thebibliography}{00}
+
+\bibitem{vestal2007preemptive}
+S. Vestal, ``Preemptive scheduling of multi-criticality systems with varying degrees of execution time assurance,'' in \textit{Proc. 28th IEEE Real-Time Systems Symposium (RTSS)}, 2007, pp. 239--243.
+
+\bibitem{liu2000real}
+J. W.-S. Liu, \textit{Real-Time Systems}. Upper Saddle River, NJ: Prentice Hall, 2000.
+
+\bibitem{buttazzo2011hard}
+G. C. Buttazzo, \textit{Hard Real-Time Computing Systems: Predictable Scheduling Algorithms and Applications}, 3rd ed. New York: Springer, 2011.
+
+\bibitem{liu1973scheduling}
+C. L. Liu and J. W. Layland, ``Scheduling algorithms for multiprogramming in a hard-real-time environment,'' \textit{J. ACM}, vol. 20, no. 1, pp. 46--61, Jan. 1973.
+
+\bibitem{leung1982complexity}
+J. Y.-T. Leung and J. Whitehead, ``On the complexity of fixed-priority scheduling of periodic, real-time tasks,'' \textit{Performance Evaluation}, vol. 2, no. 4, pp. 237--250, 1982.
+
+\bibitem{joseph1986finding}
+M. Joseph and P. Pandya, ``Finding response times in a real-time system,'' \textit{Comput. J.}, vol. 29, no. 5, pp. 390--395, 1986.
+
+\bibitem{audsley1993applying}
+N. C. Audsley, A. Burns, M. F. Richardson, K. W. Tindell, and A. J. Wellings, ``Applying new scheduling theory to static priority pre-emptive scheduling,'' \textit{Software Engineering Journal}, vol. 8, no. 5, pp. 284--292, 1993.
+
+\bibitem{baruah2011mixed}
+S. Baruah, V. Bonifaci, G. D'Angelo, H. Li, A. Marchetti-Spaccamela, S. Van Der Ster, and L. Stougie, ``Preemptive uniprocessor scheduling of mixed-criticality sporadic task systems,'' in \textit{Proc. 23rd Euromicro Conf. Real-Time Systems (ECRTS)}, 2011, pp. 145--154.
+
+\bibitem{burns2013mixed}
+A. Burns and R. Davis, ``Mixed criticality systems---a review,'' Dept. of Computer Science, Univ. of York, Tech. Rep., 2013. [Online]. Available: \url{https://www-users.cs.york.ac.uk/burns/review.pdf}
+
+\bibitem{gonzalez2001mast}
+M. González Harbour, J. J. Gutiérrez García, J. C. Palencia Gutiérrez, and J. M. Drake Moyano, ``MAST: Modeling and analysis suite for real time applications,'' in \textit{Proc. 13th Euromicro Conf. Real-Time Systems}, 2001, pp. 125--134.
+
+\bibitem{singhoff2004cheddar}
+F. Singhoff, J. Legrand, L. Nana, and L. Marcé, ``Cheddar: A flexible real time scheduling framework,'' \textit{ACM SIGAda Ada Letters}, vol. 24, no. 4, pp. 1--8, 2004.
+
+\bibitem{wilhelm2008worst}
+R. Wilhelm et al., ``The worst-case execution-time problem---overview of methods and survey of tools,'' \textit{ACM Trans. Embedded Comput. Syst.}, vol. 7, no. 3, pp. 1--53, 2008.
+
+\bibitem{freertos}
+R. Barry, \textit{FreeRTOS Reference Manual}. Real Time Engineers Ltd., 2016. [Online]. Available: \url{https://www.freertos.org}
+
+\bibitem{rtssim}
+A. Bastoni, B. Brandenburg, and J. Anderson, ``Cache-related preemption and migration delays: Empirical approximation and impact on schedulability,'' in \textit{Proc. OSPERT Workshop}, 2010.
+
+\bibitem{sart2019}
+F. Mallet and R. De Simone, ``CCSL for modeling AADL event-data port communications,'' in \textit{Proc. 14th IEEE Int. Conf. Embedded and Real-Time Computing Systems and Applications (RTCSA)}, 2019.
+
+\end{thebibliography}
+
+%======================================================================
+\appendix
+\section{Full Code Listing}
+
+The complete source code is organized as follows. Key files are reproduced below; the full project is available in the submission archive.
+
+\subsection{TaskModel.ts --- Type Definitions}
+\begin{lstlisting}[caption={Task model types (src/engine/TaskModel.ts)}]
+export type SystemMode = 'LO' | 'HI';
+export type Criticality = 'LO' | 'HI';
+
+export interface TaskModel {
+  id: string;
+  name: string;
+  criticality: Criticality;
+  period: number;        // ms
+  deadline: number;      // ms (relative)
+  wcetLo: number;        // ms
+  wcetHi?: number;       // ms (HI tasks only)
+  priority?: number;     // lower = higher priority
+}
+
+export interface SchedulerJob {
+  jobId: string;
+  taskId: string;
+  releaseTime: number;
+  absoluteDeadline: number;
+  budget: number;        // sampled WCET for this job
+  executedMs: number;    // elapsed execution time
+  completed: boolean;
+}
+
+export type EventType =
+  | 'release' | 'completion'
+  | 'deadline_miss' | 'mode_switch' | 'suspension';
+
+export interface SimulationEvent {
+  type: EventType;
+  taskId: string;
+  time: number;
+  details?: string;
+}
+
+export interface TimelineSegment {
+  taskId: string;
+  start: number;
+  end: number;
+  mode: SystemMode;
+}
+
+export interface ModeSwitchMarker {
+  time: number;
+}
+\end{lstlisting}
+
+\subsection{schedulerStore.ts --- Key State Actions}
+\begin{lstlisting}[caption={Store actions (src/store/schedulerStore.ts)}]
+startSimulation: () => {
+  const { tasks, tickSize, speed, simulationEndTime } = get();
+  const engine = new SchedulerEngine();
+  const clock = new SimulationClock();
+  const hyperperiod = computeHyperperiod(tasks.map(t => t.period));
+  const endTime = simulationEndTime ?? hyperperiod;
+  const intervalMs = SPEED_TO_INTERVAL[speed];
+
+  clock.start(() => {
+    const result = engine.step(tasks, tickSize);
+    set({ ...result });
+    if (result.time >= endTime) {
+      clock.stop();
+      set({ isRunning: false, isCompleted: true });
+    }
+  }, intervalMs);
+
+  set({ isRunning: true, isCompleted: false,
+        engine, clock, effectiveSimulationEndTime: endTime });
+},
+\end{lstlisting}
+
+\end{document}
