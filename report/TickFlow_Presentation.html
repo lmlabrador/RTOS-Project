@@ -216,7 +216,7 @@ tr:last-child td{border:none}
 <div class="slide active" id="slide-1">
   <div class="hero" style="margin-bottom:16px"><span>TickFlow</span></div>
   <p style="font-size:1.25rem;color:var(--muted);text-align:center;max-width:600px;margin-bottom:36px">
-    A web-based simulator for<br><strong style="color:var(--text)">mixed-criticality real-time scheduling</strong>
+    Implementation and Evaluation of<br><strong style="color:var(--text)">Mixed-Criticality Scheduling with Mode Switching in an RTOS</strong>
   </p>
   <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:40px">
     <span class="tag tag-hi">Vestal MC Model</span>
@@ -250,7 +250,7 @@ tr:last-child td{border:none}
       </div>
     </div>
   </div>
-  <p style="margin-top:20px;font-size:.82rem;color:var(--faint)">Lance Labrador &nbsp;·&nbsp; Real-Time Operating Systems &nbsp;·&nbsp; April 2026</p>
+  <p style="margin-top:20px;font-size:.82rem;color:var(--faint)">Lance Labrador, Alexander Kingsley &nbsp;·&nbsp; Real-Time Operating Systems &nbsp;·&nbsp; April 2026</p>
 </div>
 
 <!-- ════════════════════════════════════════════════════
@@ -469,46 +469,131 @@ tr:last-child td{border:none}
 ════════════════════════════════════════════════════ -->
 <div class="slide" id="slide-6">
   <div class="slide-title">System Architecture</div>
-  <div class="row">
-    <!-- Architecture diagram -->
-    <div class="col" style="flex:1.1">
-      <div class="arch-box arch-top">
-        <div class="arch-title" style="color:var(--hi)">React 19 Component Layer</div>
-        <div class="arch-items">Dashboard &nbsp;·&nbsp; TaskForm &nbsp;·&nbsp; TaskTable &nbsp;·&nbsp; SimulationControls<br>SchedulerTimeline &nbsp;·&nbsp; SystemStatusPanel &nbsp;·&nbsp; EventLog &nbsp;·&nbsp; ReportModal</div>
+
+  <!-- ══ Three-layer diagram ══ -->
+  <div style="width:100%;display:flex;gap:14px;margin-bottom:16px;align-items:stretch">
+
+    <!-- Left labels -->
+    <div style="display:flex;flex-direction:column;justify-content:space-around;gap:0;width:58px;flex-shrink:0">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center">
+        <span style="font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--hi);writing-mode:vertical-rl;transform:rotate(180deg)">UI Layer</span>
       </div>
-      <div class="arch-arrow">▲ reads state &nbsp;&nbsp;|&nbsp;&nbsp; re-renders on change ▼</div>
-      <div class="arch-box arch-mid">
-        <div class="arch-title" style="color:var(--accent)">Zustand State Store</div>
-        <div class="arch-items">tasks · mode · time · events · segments · modeSwitches<br>Actions: addTask · tick · startSimulation · resetSimulation</div>
+      <div style="height:36px"></div><!-- spacer for arrow row -->
+      <div style="flex:1;display:flex;align-items:center;justify-content:center">
+        <span style="font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--accent);writing-mode:vertical-rl;transform:rotate(180deg)">State Layer</span>
       </div>
-      <div class="arch-arrow">▲ broadcasts snapshot &nbsp;&nbsp;|&nbsp;&nbsp; calls step() ▼</div>
-      <div class="arch-box arch-bot">
-        <div class="arch-title" style="color:var(--lo)">Simulation Engine Layer — zero UI dependencies</div>
-        <div class="arch-items">SchedulerEngine &nbsp;·&nbsp; SimulationClock &nbsp;·&nbsp; TaskModel</div>
+      <div style="height:36px"></div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center">
+        <span style="font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--lo);writing-mode:vertical-rl;transform:rotate(180deg)">Engine Layer</span>
       </div>
     </div>
-    <!-- Key decisions -->
-    <div class="col" style="flex:.9">
-      <div class="card">
-        <h3>Why This Architecture?</h3>
-        <ul class="b">
-          <li><strong>Engine isolation</strong> — scheduler has zero UI dependencies; testable standalone</li>
-          <li><strong>One-way data flow</strong> — engine → store → UI, no inconsistent state</li>
-          <li><strong>Bounded memory</strong> — circular buffers cap heap at ~400 KB</li>
-        </ul>
+
+    <!-- Right: layers + arrows -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:0">
+
+      <!-- Layer 1: UI -->
+      <div style="background:rgba(59,130,246,.1);border:2px solid var(--hi-border);border-radius:12px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:.95rem;font-weight:700;color:var(--hi);margin-bottom:8px">React 19 Components</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <span style="font-size:.7rem;background:rgba(59,130,246,.18);color:var(--hi);padding:3px 9px;border-radius:6px;font-weight:600">TaskForm</span>
+            <span style="font-size:.7rem;background:rgba(59,130,246,.18);color:var(--hi);padding:3px 9px;border-radius:6px;font-weight:600">TaskTable</span>
+            <span style="font-size:.7rem;background:rgba(59,130,246,.18);color:var(--hi);padding:3px 9px;border-radius:6px;font-weight:600">SchedulerTimeline</span>
+            <span style="font-size:.7rem;background:rgba(59,130,246,.18);color:var(--hi);padding:3px 9px;border-radius:6px;font-weight:600">EventLog</span>
+            <span style="font-size:.7rem;background:rgba(59,130,246,.18);color:var(--hi);padding:3px 9px;border-radius:6px;font-weight:600">SystemStatus</span>
+            <span style="font-size:.7rem;background:rgba(59,130,246,.18);color:var(--hi);padding:3px 9px;border-radius:6px;font-weight:600">ReportModal</span>
+          </div>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);text-align:right;flex-shrink:0;padding-left:16px;border-left:1px solid var(--border)">
+          User<br>interacts<br>here
+        </div>
       </div>
-      <div class="card">
-        <h3>Tech Stack</h3>
-        <table style="font-size:.82rem">
-          <tr><td style="color:var(--muted);width:80px">UI</td><td>React 19 + TypeScript 5.9</td></tr>
-          <tr><td style="color:var(--muted)">State</td><td>Zustand 5.0</td></tr>
-          <tr><td style="color:var(--muted)">Animation</td><td>Framer Motion 12</td></tr>
-          <tr><td style="color:var(--muted)">Build</td><td>Vite 5.4</td></tr>
-          <tr><td style="color:var(--muted)">Runtime</td><td>Browser — no install</td></tr>
-        </table>
+
+      <!-- Arrow 1 -->
+      <div style="display:flex;align-items:center;height:36px;padding:0 24px">
+        <div style="flex:1;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:.7rem;color:var(--green);display:flex;align-items:center;gap:5px"><span>▲</span> re-renders on state change</span>
+          <span style="font-size:.7rem;color:var(--amber);display:flex;align-items:center;gap:5px">user actions → store updates <span>▼</span></span>
+        </div>
       </div>
+
+      <!-- Layer 2: Store -->
+      <div style="background:rgba(56,189,248,.08);border:2px solid rgba(56,189,248,.35);border-radius:12px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:.95rem;font-weight:700;color:var(--accent);margin-bottom:8px">Zustand State Store</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <span style="font-size:.7rem;background:rgba(56,189,248,.15);color:var(--accent);padding:3px 9px;border-radius:6px;font-weight:600">tasks</span>
+            <span style="font-size:.7rem;background:rgba(56,189,248,.15);color:var(--accent);padding:3px 9px;border-radius:6px;font-weight:600">mode</span>
+            <span style="font-size:.7rem;background:rgba(56,189,248,.15);color:var(--accent);padding:3px 9px;border-radius:6px;font-weight:600">time</span>
+            <span style="font-size:.7rem;background:rgba(56,189,248,.15);color:var(--accent);padding:3px 9px;border-radius:6px;font-weight:600">events</span>
+            <span style="font-size:.7rem;background:rgba(56,189,248,.15);color:var(--accent);padding:3px 9px;border-radius:6px;font-weight:600">segments</span>
+            <span style="font-size:.7rem;background:rgba(56,189,248,.15);color:var(--accent);padding:3px 9px;border-radius:6px;font-weight:600">modeSwitches</span>
+          </div>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);text-align:right;flex-shrink:0;padding-left:16px;border-left:1px solid var(--border)">
+          Single<br>source<br>of truth
+        </div>
+      </div>
+
+      <!-- Arrow 2 -->
+      <div style="display:flex;align-items:center;height:36px;padding:0 24px">
+        <div style="flex:1;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:.7rem;color:var(--green);display:flex;align-items:center;gap:5px"><span>▲</span> snapshot broadcast each tick</span>
+          <span style="font-size:.7rem;color:var(--amber);display:flex;align-items:center;gap:5px">calls <code style="font-size:.68rem">step()</code> each tick <span>▼</span></span>
+        </div>
+      </div>
+
+      <!-- Layer 3: Engine — three side-by-side boxes -->
+      <div style="background:rgba(100,116,139,.1);border:2px solid var(--lo-border);border-radius:12px;padding:14px 18px;display:flex;gap:12px;align-items:stretch">
+        <div style="flex:1.6;background:rgba(100,116,139,.12);border:1px solid var(--lo-border);border-radius:9px;padding:12px 14px">
+          <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:8px">SchedulerEngine</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="font-size:.7rem;color:var(--muted);padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">releaseJobs()</span>
+            <span style="font-size:.7rem;color:var(--muted);padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">selectReadyJob()</span>
+            <span style="font-size:.7rem;color:var(--red);padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">triggerModeSwitch()</span>
+            <span style="font-size:.7rem;color:var(--muted);padding:2px 0">detectDeadlineMisses()</span>
+          </div>
+        </div>
+        <div style="flex:1;background:rgba(100,116,139,.12);border:1px solid var(--lo-border);border-radius:9px;padding:12px 14px">
+          <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:8px">SimulationClock</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="font-size:.7rem;color:var(--muted);padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">setInterval wrapper</span>
+            <span style="font-size:.7rem;color:var(--muted);padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">start() / stop()</span>
+            <span style="font-size:.7rem;color:var(--muted);padding:2px 0">sim-time only</span>
+          </div>
+        </div>
+        <div style="flex:1;background:rgba(100,116,139,.12);border:1px solid var(--lo-border);border-radius:9px;padding:12px 14px">
+          <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:8px">TaskModel (TCB)</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="font-size:.7rem;color:var(--muted);padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">period / deadline / priority</span>
+            <span style="font-size:.7rem;color:var(--accent);padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">criticality ← new</span>
+            <span style="font-size:.7rem;color:var(--accent);padding:2px 0">wcetLo / wcetHi ← new</span>
+          </div>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);text-align:right;flex-shrink:0;padding-left:14px;border-left:1px solid var(--border);display:flex;align-items:center">
+          Zero UI<br>deps
+        </div>
+      </div>
+
+    </div><!-- end right col -->
+  </div><!-- end diagram -->
+
+  <!-- ── Three key points strip ── -->
+  <div style="width:100%;display:flex;gap:10px">
+    <div style="flex:1;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:1.1rem;flex-shrink:0">🔒</span>
+      <div><div style="font-size:.8rem;font-weight:700">Engine isolated</div><div style="font-size:.7rem;color:var(--muted)">No React imports — testable standalone</div></div>
+    </div>
+    <div style="flex:1;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:1.1rem;flex-shrink:0">➡️</span>
+      <div><div style="font-size:.8rem;font-weight:700">One-way data flow</div><div style="font-size:.7rem;color:var(--muted)">Engine → Store → UI</div></div>
+    </div>
+    <div style="flex:1;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:1.1rem;flex-shrink:0">💾</span>
+      <div><div style="font-size:.8rem;font-weight:700">Bounded memory</div><div style="font-size:.7rem;color:var(--muted)">Circular buffers — ~400 KB max</div></div>
     </div>
   </div>
+
 </div>
 
 <!-- ════════════════════════════════════════════════════
@@ -607,7 +692,7 @@ tr:last-child td{border:none}
         </ul>
       </div>
       <div style="background:var(--accent-dim);border:1px solid rgba(56,189,248,.3);border-radius:10px;padding:12px">
-        <p style="font-size:.82rem;color:var(--muted)"><strong style="color:var(--accent)">35% overrun probability</strong> — HI job budget sampled above <code>wcetLo</code>, triggering observable mode switches.</p>
+        <p style="font-size:.82rem;color:var(--muted)"><strong style="color:var(--accent)">35% overrun probability</strong> — HI job budget sampled above <code>wcetLo</code>. The <strong style="color:var(--text)">first</strong> overrun triggers the mode switch; the system stays in HI mode for the rest of the run.</p>
       </div>
     </div>
   </div>
@@ -680,7 +765,7 @@ tr:last-child td{border:none}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="card kpi"><div class="val" style="font-size:1.8rem">5/5</div><div class="lbl">RTA tests passed</div></div>
         <div class="card kpi"><div class="val" style="font-size:1.8rem;color:var(--green)">0</div><div class="lbl">Deadline misses</div></div>
-        <div class="card kpi"><div class="val" style="font-size:1.8rem">~7</div><div class="lbl">Mode switches / hyperperiod</div></div>
+        <div class="card kpi"><div class="val" style="font-size:1.8rem">1</div><div class="lbl">Mode switch per simulation (LO→HI only)</div></div>
         <div class="card kpi"><div class="val" style="font-size:1.8rem;color:var(--green)">0</div><div class="lbl">Optimizer score (optimal)</div></div>
       </div>
     </div>
@@ -787,56 +872,67 @@ tr:last-child td{border:none}
 <div class="slide" id="slide-11">
   <div class="slide-title">Learning Outcomes Reflection</div>
   <div style="font-size:.8rem;color:var(--muted);margin-top:-20px;margin-bottom:16px;width:100%">Slides 11–12 · LO1 · LO3 · LO4</div>
-  <div class="row">
+  <div class="row" style="align-items:stretch">
+
     <!-- LO1 -->
-    <div class="card" style="flex:1;border-top:3px solid var(--accent)">
-      <div style="font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin-bottom:8px">LO1</div>
-      <div style="font-size:.95rem;font-weight:700;margin-bottom:10px">Real-Time Scheduling Policies</div>
-      <ul class="b" style="font-size:.83rem">
-        <li>Implemented <strong>FPPS</strong> with RMS + DMS priority strategies</li>
-        <li>Verified via <strong>RTA</strong> across 4 priority configurations</li>
-        <li>Optimizer confirmed <strong>DMS dominates RMS</strong> for constrained deadlines</li>
+    <div class="card" style="flex:1;border-top:4px solid var(--accent);display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:2.4rem;font-weight:900;color:var(--accent);line-height:1;letter-spacing:-.02em">LO1</div>
+      <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Real-Time Scheduling Policies</div>
+      <div style="font-size:1.08rem;font-weight:700;color:var(--text);line-height:1.35;border-left:3px solid var(--accent);padding-left:10px">
+        DMS <span style="color:var(--accent)">dominates</span> RMS<br>for constrained deadlines
+      </div>
+      <ul class="b" style="font-size:.81rem;margin-top:2px">
+        <li>FPPS with <strong>RMS + DMS</strong> strategies</li>
+        <li>Validated via <strong>RTA</strong> — 4 priority configs</li>
       </ul>
-      <div style="margin-top:12px;padding:8px 10px;background:var(--accent-dim);border-radius:8px;font-size:.75rem;color:var(--muted)">
-        <em>DMS &gt; RMS — obvious from the optimizer results, easy to miss in a textbook.</em>
+      <div style="margin-top:auto;padding:8px 10px;background:var(--accent-dim);border-radius:8px;font-size:.76rem;color:var(--muted)">
+        <em>"Easy to accept in theory — obvious only after watching the optimizer score them."</em>
       </div>
     </div>
+
     <!-- LO3 -->
-    <div class="card" style="flex:1;border-top:3px solid var(--amber)">
-      <div style="font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--amber);margin-bottom:8px">LO3</div>
-      <div style="font-size:.95rem;font-weight:700;margin-bottom:10px">Concurrency &amp; Priority Inversion</div>
-      <ul class="b" style="font-size:.83rem">
-        <li>FPPS <strong>prevents priority inversion</strong> — highest-priority job always runs</li>
-        <li>In MC context: HI task blocked by LO task = <strong>safety violation</strong></li>
-        <li>Mode switch <strong>eliminates LO-induced blocking</strong> in HI mode</li>
+    <div class="card" style="flex:1;border-top:4px solid var(--amber);display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:2.4rem;font-weight:900;color:var(--amber);line-height:1;letter-spacing:-.02em">LO3</div>
+      <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Concurrency &amp; Priority Inversion</div>
+      <div style="font-size:1.08rem;font-weight:700;color:var(--text);line-height:1.35;border-left:3px solid var(--amber);padding-left:10px">
+        Mode switch<br><span style="color:var(--amber)">is</span> the resolution
+      </div>
+      <ul class="b" style="font-size:.81rem;margin-top:2px">
+        <li>LO task in ready queue = <strong>blocks HI task</strong></li>
+        <li>Suspension <strong>removes all LO</strong> from CPU immediately</li>
       </ul>
-      <div style="margin-top:12px;display:flex;gap:6px;align-items:center;font-size:.78rem">
-        <span class="tag tag-lo" style="font-size:.68rem">LO job</span>
-        <span style="color:var(--red);font-weight:700">→ suspended</span>
-        <span class="tag tag-hi" style="font-size:.68rem">HI job</span>
+      <div style="margin-top:auto;display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(245,158,11,.08);border-radius:8px;font-size:.8rem;flex-wrap:wrap">
+        <span class="tag tag-lo">LO job</span>
+        <span style="color:var(--red);font-weight:700;font-size:.9rem">→ suspended</span>
+        <span class="tag tag-hi">HI job</span>
         <span style="color:var(--green);font-weight:700">gets CPU</span>
       </div>
     </div>
+
     <!-- LO4 -->
-    <div class="card" style="flex:1;border-top:3px solid var(--hi)">
-      <div style="font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--hi);margin-bottom:8px">LO4</div>
-      <div style="font-size:.95rem;font-weight:700;margin-bottom:10px">Kernel Architectures</div>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <div class="kernel-box kernel-mono" style="padding:10px">
-          <div class="kernel-title" style="color:var(--lo);font-size:.8rem">Monolithic</div>
-          <div class="kernel-layer" style="background:rgba(100,116,139,.15);font-size:.7rem;color:var(--muted)">App + Scheduler + Drivers</div>
-          <div style="font-size:.7rem;color:var(--faint);margin-top:4px">FreeRTOS · Linux-RT<br>Fast · no isolation</div>
+    <div class="card" style="flex:1;border-top:4px solid var(--hi);display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:2.4rem;font-weight:900;color:var(--hi);line-height:1;letter-spacing:-.02em">LO4</div>
+      <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Kernel Architectures</div>
+      <div style="font-size:1.08rem;font-weight:700;color:var(--text);line-height:1.35;border-left:3px solid var(--hi);padding-left:10px">
+        Mode switch ≈<br><span style="color:var(--hi)">criticality partitioning</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:2px">
+        <div style="flex:1;padding:10px;background:rgba(100,116,139,.12);border-radius:8px;text-align:center">
+          <div style="font-size:.75rem;font-weight:800;color:var(--lo);margin-bottom:5px">Monolithic</div>
+          <div style="font-size:.68rem;color:var(--muted)">FreeRTOS · Linux-RT</div>
+          <div style="font-size:.65rem;color:var(--faint);margin-top:3px">Fast · no isolation</div>
         </div>
-        <div class="kernel-box kernel-micro" style="padding:10px">
-          <div class="kernel-title" style="color:var(--hi);font-size:.8rem">Microkernel</div>
-          <div class="kernel-layer" style="background:rgba(59,130,246,.12);font-size:.7rem;color:var(--muted)">HI partition</div>
-          <div class="kernel-layer" style="background:rgba(100,116,139,.1);font-size:.7rem;color:var(--muted)">LO partition</div>
-          <div class="kernel-layer" style="background:rgba(56,189,248,.08);font-size:.7rem;color:var(--muted)">Kernel (sched+IPC)</div>
-          <div style="font-size:.7rem;color:var(--faint);margin-top:4px">QNX · seL4 · ARINC 653<br>Required for DO-178C</div>
+        <div style="flex:1;padding:10px;background:var(--hi-dim);border-radius:8px;text-align:center;border:1px solid rgba(96,165,250,.25)">
+          <div style="font-size:.75rem;font-weight:800;color:var(--hi);margin-bottom:5px">Microkernel</div>
+          <div style="font-size:.68rem;color:var(--muted)">QNX · seL4 · ARINC 653</div>
+          <div style="font-size:.65rem;color:var(--faint);margin-top:3px">Isolated · DO-178C</div>
         </div>
       </div>
-      <div style="font-size:.74rem;color:var(--muted);padding:6px 8px;background:var(--hi-dim);border-radius:6px">TickFlow's mode-switch ≈ criticality partitioning a microkernel enforces in hardware</div>
+      <div style="margin-top:auto;font-size:.76rem;color:var(--muted);padding:8px 10px;background:var(--hi-dim);border-radius:8px">
+        <em>TickFlow enforces this in software — microkernel does it in hardware</em>
+      </div>
     </div>
+
   </div>
 </div>
 
@@ -961,25 +1057,9 @@ tr:last-child td{border:none}
      SLIDE 15 – Q&A BACKUP: ANTICIPATED QUESTIONS
 ════════════════════════════════════════════════════ -->
 <div class="slide" id="slide-15">
-  <div class="backup-label">Backup — Q&amp;A</div>
-  <div class="slide-title">Anticipated Questions</div>
-  <div class="row">
-    <div class="card" style="flex:1">
-      <h3>Why FPPS and not EDF?</h3>
-      <p class="sub" style="font-size:.84rem">EDF achieves 100% utilization but ARINC 653 and AUTOSAR mandate fixed priorities for auditability. Under overload, EDF misses deadlines unpredictably — FPPS guarantees lower-priority tasks fail first. Predictability &gt; utilization in safety systems.</p>
-    </div>
-    <div class="card" style="flex:1">
-      <h3>Why no mode recovery?</h3>
-      <p class="sub" style="font-size:.84rem">Re-admitting LO tasks after HI mode can violate HI deadlines during transition. Baruah 2011 describes formal recovery protocols — they require cross-mode schedulability analysis. Scoped out to keep the model tractable.</p>
-    </div>
-    <div class="card" style="flex:1">
-      <h3>How realistic is 35% overrun?</h3>
-      <p class="sub" style="font-size:.84rem">Pedagogical, not empirical. Real WCET uses static analysis tools or measurement bounds. 35% was chosen to produce observable mode switches. The insight — overrun rate drives LO starvation — holds regardless of the exact value.</p>
-    </div>
-    <div class="card" style="flex:1">
-      <h3>Does it scale to more tasks?</h3>
-      <p class="sub" style="font-size:.84rem">Engine: O(n) per tick · RTA: O(n²) per analysis. Circular buffers cap memory regardless of n. Tested up to 10 tasks — no degradation. Gantt window fixed at 1800 segments.</p>
-    </div>
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px">
+    <div style="font-size:5rem;font-weight:900;color:var(--text);letter-spacing:-.04em;line-height:1">Questions?</div>
+    <div style="font-size:.9rem;color:var(--muted)">TickFlow — Mixed-Criticality Scheduling Simulator</div>
   </div>
 </div>
 

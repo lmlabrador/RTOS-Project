@@ -169,7 +169,7 @@ The event log shows exactly what happened: T2 released, T2 completed, a few cycl
 
 *[Point to KPIs]*
 
-Over a full 1200-millisecond hyperperiod, zero deadline misses on HI tasks, approximately seven mode switches — which matches the theoretical prediction of 20 HI-task jobs times 35% overrun rate.
+Over a full 1200-millisecond hyperperiod, zero deadline misses on HI tasks, exactly one mode switch — the irreversible LO→HI transition triggered by the first HI-task overrun. With a 35% overrun probability, that first overrun is expected to occur early in the simulation.
 
 The optimization report confirmed the default priority assignment of 1, 2, 3 is already optimal — scoring zero — meaning no changes were recommended."
 
@@ -220,7 +220,7 @@ If I were extending this, the highest-value addition would be EDF scheduling as 
 
 *[Point to recommendations]*
 
-Three practical takeaways: always verify schedulability with RTA before you trust a task set — intuition is unreliable. Choose WCET budgets conservatively — the simulation showed that a 35% overrun rate drives seven mode switches per hyperperiod, which completely starves LO tasks. And use Deadline Monotonic over Rate Monotonic whenever tasks have constrained deadlines.
+Three practical takeaways: always verify schedulability with RTA before you trust a task set — intuition is unreliable. Choose WCET budgets conservatively — with a 35% overrun rate the mode switch happens early, permanently starving T2 for the rest of the simulation. And use Deadline Monotonic over Rate Monotonic whenever tasks have constrained deadlines.
 
 *[Point to future work]*
 

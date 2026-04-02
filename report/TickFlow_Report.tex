@@ -447,7 +447,7 @@ All HI tasks are schedulable in HI mode.
 This experiment directly addresses the proposal's goal of observing how mode switching affects lower-criticality tasks. The simulator was run for one full hyperperiod (1200ms) with the 35\% HI-task overrun model and the following metrics were recorded:
 
 \begin{itemize}
-  \item \textbf{LO-task suspension events}: T2 (LO) is suspended immediately on every mode switch. Its in-progress job is removed from the ready queue and logged as a \texttt{suspension} event.
+  \item \textbf{LO-task suspension}: When the single LO$\rightarrow$HI mode switch occurs, T2 is immediately removed from the ready queue and logged as a \texttt{suspension} event. All subsequent T2 job releases are suppressed for the remainder of the simulation.
   \item \textbf{LO-task starvation}: During HI mode, T2 does not execute at all. If the system remains in HI mode for an entire T2 period (80ms), T2 misses a deadline.
   \item \textbf{HI-task continuity}: T1 and T3 continue executing in HI mode using their $C_i^{\text{HI}}$ budgets, meeting all deadlines as verified by RTA in Experiment 1.
 \end{itemize}
@@ -464,7 +464,9 @@ The simulation confirms the proposed mechanism: LO tasks are immediately sacrifi
 Both are below 1.0, confirming the system avoids overload in both modes.
 
 \subsubsection{Mode Switch Frequency}
-With a 35\% overrun probability per HI-task job, the expected number of mode switches per hyperperiod can be estimated. In 1200ms, T1 releases $\lfloor 1200/100 \rfloor = 12$ jobs and T3 releases $\lfloor 1200/150 \rfloor = 8$ jobs. Expected overruns: $(12+8) \times 0.35 = 7$ per hyperperiod, each triggering a potential mode switch (subject to already being in HI mode). Simulation results confirm this order of magnitude.
+The \texttt{triggerModeSwitch()} function contains an early-return guard: if the system is already in HI mode, the function exits immediately without further action. This means there is \textbf{exactly one} mode switch per simulation run --- the irreversible LO$\rightarrow$HI transition. Subsequent HI-task overruns (of which there may be many) are no-ops with respect to mode state.
+
+With a 35\% overrun probability per HI-task job, the expected number of \textit{overrun events} per hyperperiod is $(12+8) \times 0.35 = 7$, but only the first triggers the mode switch. The remaining overruns execute within the now-active HI-mode budget ($C_i^{\text{HI}}$) without any further state change. This is consistent with the Vestal model, which defines no HI$\rightarrow$LO recovery mechanism.
 
 \subsubsection{Deadline Miss Rate}
 In LO mode under the default task set, the theoretical deadline miss rate is 0\% (as verified by RTA). Deadline misses occur only when tasks are assigned priorities that violate schedulability conditions, which the optimization engine detects and flags.
@@ -507,7 +509,7 @@ Browser JavaScript executes in a single-threaded event loop, eliminating classic
 \begin{enumerate}
   \item \textbf{Separation of Concerns}: Isolating the scheduler engine from state management and UI made it straightforward to unit-test scheduling logic independently and swap visualization components.
   \item \textbf{Type Safety}: TypeScript's strict type system caught several interface mismatches between engine output types and component props early in development, reducing debugging time.
-  \item \textbf{WCET Estimation Matters}: The 35\%/65\% overrun probability model revealed that even a moderate overrun rate causes frequent mode switches, dramatically impacting LO-task throughput---a practical lesson in system margin selection.
+  \item \textbf{WCET Estimation Matters}: The 35\%/65\% overrun probability model revealed that a moderate overrun rate causes the single LO$\rightarrow$HI mode switch to occur early in the simulation, permanently starving LO tasks for the rest of the run---a practical lesson in WCET margin selection.
   \item \textbf{RTA Limitations}: RTA assumes independent tasks and ignores cache effects, OS jitter, and bus contention. Real hardware schedulability analysis requires additional pessimism factors \cite{wilhelm2008worst}.
 \end{enumerate}
 
